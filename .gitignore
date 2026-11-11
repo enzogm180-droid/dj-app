@@ -1,0 +1,20 @@
+# Dependencias que instala npm (se regeneran con "npm install")
+node_modules/
+
+# Versión compilada de la app (se regenera con "npm run build")
+dist/
+
+# Claves secretas (Supabase, etc.): NUNCA se suben a GitHub
+.env
+.env.*
+
+# Archivos de audio: tu música se queda en tu PC
+*.mp3
+*.wav
+*.flac
+*.m4a
+
+# Configuración local de herramientas
+.claude/
+.vscode/
+*.log
