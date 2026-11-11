@@ -94,17 +94,90 @@ body {
   min-width: 0;
 }
 
+/* Título (se corta con "…" si es largo) + etiqueta STEMS (siempre visible). */
 .track-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-weight: 600;
+}
+
+.track-name {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.track-title .badge {
+  flex-shrink: 0;
+}
+
+.track-artist {
+  color: var(--muted);
+  font-size: 13px;
+  min-height: 1.2em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .track-time {
-  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
   font-variant-numeric: tabular-nums;
   font-size: 14px;
+}
+
+/* Tiempo restante: lo que importa para saber cuándo empezar a mezclar. */
+.remaining {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  vertical-align: middle;
+}
+
+.badge[hidden] {
+  display: none;
+}
+
+/* --- Pads de stems -------------------------------------------------------------- */
+.pads {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.pad {
+  padding: 10px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #17343a;
+  border-color: var(--accent);
+}
+
+.pad:disabled {
+  background: var(--panel-2);
+  border-color: #353a42;
+}
+
+/* Stem quitado: en rojo apagado, para ver de un vistazo qué falta. */
+.pad.muted {
+  background: #3a1c1f;
+  border-color: #e5484d;
+  color: #f1a7aa;
 }
 
 .load,
@@ -218,6 +291,43 @@ button:disabled {
   color: var(--accent);
 }
 
+/* Interruptor EQ / STEMS */
+.mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.mode button {
+  padding: 3px 0;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 0;
+}
+
+.mode button:first-child {
+  border-radius: 5px 0 0 5px;
+}
+
+.mode button:last-child {
+  border-radius: 0 5px 5px 0;
+}
+
+.mode button[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
+.knobs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.knobs[hidden] {
+  display: none;
+}
+
 .eq {
   display: flex;
   flex-direction: column;
@@ -273,4 +383,98 @@ button:disabled {
 
 .xfader input {
   flex: 1;
+}
+
+/* --- Biblioteca ----------------------------------------------------------------- */
+.library {
+  margin-top: 12px;
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 12px 16px 16px;
+}
+
+.library-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.library-info {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.library-bar input[type='search'] {
+  width: 240px;
+  max-width: 100%;
+  background: #0d0f12;
+  color: var(--text);
+  border: 1px solid #353a42;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.library-list {
+  max-height: 340px;
+  overflow: auto;
+}
+
+.library table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.library th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  text-align: left;
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #353a42;
+}
+
+.library td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #23272d;
+}
+
+.library tbody tr:hover {
+  background: var(--panel-2);
+}
+
+.lib-artist,
+.muted-text {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.library .num {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.load-buttons {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.load-buttons button + button {
+  margin-left: 6px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }

@@ -8,7 +8,8 @@
 export class Waveform {
   private readonly canvas: HTMLCanvasElement;
   private readonly g: CanvasRenderingContext2D;
-  private buffer: AudioBuffer | null = null;
+  /** Una o varias capas (con stems, son 4 que sumamos para dibujar la onda). */
+  private buffers: AudioBuffer[] = [];
   /** Para cada columna de píxeles: [mínimo, máximo] entre -1 y 1. */
   private peaks: Float32Array = new Float32Array(0);
 
@@ -22,7 +23,7 @@ export class Waveform {
     this.g = g;
 
     canvas.addEventListener('pointerdown', (e) => {
-      if (!this.buffer) return;
+      if (!this.buffers.length) return;
       const rect = canvas.getBoundingClientRect();
       this.onSeek?.((e.clientX - rect.left) / rect.width);
     });
@@ -31,8 +32,8 @@ export class Waveform {
     new ResizeObserver(() => this.resize()).observe(canvas);
   }
 
-  setBuffer(buffer: AudioBuffer): void {
-    this.buffer = buffer;
+  setBuffers(buffers: AudioBuffer[]): void {
+    this.buffers = buffers;
     this.computePeaks();
   }
 
@@ -56,7 +57,7 @@ export class Waveform {
       g.fillRect(x, top, 1, h);
     }
 
-    if (this.buffer) {
+    if (this.buffers.length) {
       // Cabezal: la línea que marca por dónde va la canción.
       g.fillStyle = css.getPropertyValue('--playhead');
       g.fillRect(playedX - 1, 0, 2, height);
@@ -74,22 +75,24 @@ export class Waveform {
   private computePeaks(): void {
     const columns = this.canvas.width;
     this.peaks = new Float32Array(columns * 2);
-    if (!this.buffer) return;
+    if (!this.buffers.length) return;
 
-    // Mezclamos los canales (izquierdo y derecho) mirando todos a la vez.
-    const channels = Array.from({ length: this.buffer.numberOfChannels }, (_, i) =>
-      this.buffer!.getChannelData(i),
-    );
-    const samplesPerColumn = Math.max(1, Math.floor(this.buffer.length / columns));
+    // Para cada canal (izquierdo y derecho), los datos de todas las capas.
+    // Con stems, sumamos las 4 capas muestra a muestra: así sale la canción entera.
+    const length = Math.min(...this.buffers.map((b) => b.length));
+    const channelCount = Math.min(...this.buffers.map((b) => b.numberOfChannels));
+    const channels = Array.from({ length: channelCount }, (_, c) => this.buffers.map((b) => b.getChannelData(c)));
+    const samplesPerColumn = Math.max(1, Math.floor(length / columns));
 
     for (let x = 0; x < columns; x++) {
       let min = 0;
       let max = 0;
       const start = x * samplesPerColumn;
-      const end = Math.min(start + samplesPerColumn, this.buffer.length);
-      for (const data of channels) {
+      const end = Math.min(start + samplesPerColumn, length);
+      for (const layers of channels) {
         for (let i = start; i < end; i++) {
-          const v = data[i];
+          let v = 0;
+          for (const data of layers) v += data[i];
           if (v < min) min = v;
           if (v > max) max = v;
         }
