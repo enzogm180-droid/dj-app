@@ -8,6 +8,8 @@ import { formatTime } from './deck-view';
 export interface LibraryView {
   /** La biblioteca abierta ahora mismo (o null si aún no hay ninguna). */
   readonly library: Library | null;
+  /** Vuelve a dibujar la lista (p. ej. cuando acabamos de calcular un BPM). */
+  refresh(): void;
 }
 
 export function createLibraryView(
@@ -25,7 +27,7 @@ export function createLibraryView(
     </div>
     <div class="library-list">
       <table>
-        <thead><tr><th>Título</th><th>Duración</th><th>Stems</th><th><span class="sr-only">Cargar</span></th></tr></thead>
+        <thead><tr><th>Título</th><th>BPM</th><th>Duración</th><th>Stems</th><th><span class="sr-only">Cargar</span></th></tr></thead>
         <tbody data-el="rows"></tbody>
       </table>
     </div>
@@ -38,7 +40,7 @@ export function createLibraryView(
   const search = el<HTMLInputElement>('search');
   const rows = el<HTMLTableSectionElement>('rows');
 
-  const view: { library: Library | null } = { library: null };
+  const view: { library: Library | null; refresh(): void } = { library: null, refresh: () => renderRows() };
 
   if (!supportsFolders()) {
     openBtn.disabled = true;
@@ -68,6 +70,7 @@ export function createLibraryView(
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td><div class="lib-title"></div><div class="lib-artist"></div></td>
+          <td class="num bpm-cell">${track.bpm ? track.bpm.toFixed(track.bpm % 1 ? 2 : 0) : '—'}</td>
           <td class="num">${track.duration ? formatTime(track.duration).replace(/\.\d$/, '') : '—'}</td>
           <td>${track.stems ? '<span class="badge">STEMS</span>' : '<span class="muted-text">—</span>'}</td>
           <td class="load-buttons">

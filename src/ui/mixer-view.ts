@@ -5,6 +5,10 @@
  *  - EQ:    las 3 ruedas son Agudos, Medios y Bajos (cortan frecuencias).
  *  - STEMS: las 3 ruedas son Voces, Instru y Beat (suben o quitan partes de la
  *           canción). Solo se puede usar si la canción está preparada.
+ *           Van sincronizadas con los pads del plato: si quitas la voz con
+ *           el pad, la rueda Voces baja a 0 %; si subes la rueda, vuelve.
+ *
+ * Debajo, la rueda de FILTRO (izquierda = paso bajo, derecha = paso alto).
  *
  * Truco: en todos los controles, DOBLE CLIC = volver al valor por defecto.
  */
@@ -63,19 +67,24 @@ function channelStrip(letter: string, channel: Channel, deck: Deck): HTMLElement
     <div class="knobs" data-knobs="stems" hidden>
       ${GROUPS.map(({ group, label }) => knob('group', group, label, letter, 0, 1, 0.01, 1)).join('')}
     </div>
+    <div class="filter-knob">
+      ${knob('filter', 'filter', 'Filtro', letter, -1, 1, 0.01, 0)}
+    </div>
     <input type="range" class="fader" data-el="volume" min="0" max="1" step="0.01" value="0.8"
       aria-label="Volumen del canal ${letter}" />
   `;
 
   const $ = <T extends HTMLElement>(sel: string) => strip.querySelector(sel) as T;
   const eqValues: Record<Band, number> = { low: 0, mid: 0, high: 0 };
-  const stemValues: Record<StemGroup, number> = { vocal: 1, instru: 1, beat: 1 };
   let mode: Mode = 'eq';
 
-  /** Aplica al sonido lo que toca según el modo (el otro modo queda "neutro"). */
+  /**
+   * Aplica el ecualizador según el modo: en STEMS se queda plano (las ruedas
+   * controlan los stems). Los stems no se tocan al cambiar de modo: los pads
+   * del plato siguen funcionando en los dos modos.
+   */
   function apply(): void {
     for (const { band } of BANDS) channel.setEq(band, mode === 'eq' ? eqValues[band] : 0);
-    for (const { group } of GROUPS) deck.setStemGroup(group, mode === 'stems' ? stemValues[group] : 1);
   }
 
   function setMode(next: Mode): void {
@@ -100,16 +109,32 @@ function channelStrip(letter: string, channel: Channel, deck: Deck): HTMLElement
     });
   }
 
+  // Ruedas de stems: mueven el volumen del stem en el plato…
   for (const { group } of GROUPS) {
-    const input = $<HTMLInputElement>(`[data-group="${group}"]`);
-    const output = $<HTMLOutputElement>(`[data-group-value="${group}"]`);
-    bindSlider(input, 1, (level) => {
-      stemValues[group] = level;
-      output.textContent = `${Math.round(level * 100)}%`;
-      input.classList.toggle('killed', level <= 0.02);
-      apply();
-    });
+    bindSlider($<HTMLInputElement>(`[data-group="${group}"]`), 1, (level) => deck.setStemGroup(group, level));
   }
+
+  // …y cuando el plato cambia (pads, Acapella, Instrumental), las ruedas se
+  // colocan solas donde toca. Así pads y ruedas siempre dicen lo mismo.
+  function showStemLevels(): void {
+    for (const { group } of GROUPS) {
+      const input = $<HTMLInputElement>(`[data-group="${group}"]`);
+      const level = deck.groupLevel(group);
+      input.value = String(level);
+      $<HTMLOutputElement>(`[data-group-value="${group}"]`).textContent = `${Math.round(level * 100)}%`;
+      input.classList.toggle('killed', level <= 0.02);
+    }
+  }
+  deck.addEventListener('stems', showStemLevels);
+  showStemLevels();
+
+  // Filtro: centro = apagado, izquierda = paso bajo, derecha = paso alto.
+  const filterOutput = $<HTMLOutputElement>('[data-filter-value="filter"]');
+  bindSlider($<HTMLInputElement>('[data-filter="filter"]'), 0, (v) => {
+    channel.setFilter(v);
+    const pct = Math.round(Math.abs(v) * 100);
+    filterOutput.textContent = Math.abs(v) < 0.02 ? 'off' : `${v < 0 ? 'LP' : 'HP'} ${pct}%`;
+  });
 
   for (const btn of strip.querySelectorAll<HTMLButtonElement>('[data-mode]')) {
     btn.addEventListener('click', () => setMode(btn.dataset.mode as Mode));

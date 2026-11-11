@@ -11,5 +11,8 @@
   "devDependencies": {
     "typescript": "^5.9.0",
     "vite": "^7.1.0"
+  },
+  "dependencies": {
+    "soundtouchjs": "^0.1.30"
   }
 }

@@ -3,9 +3,9 @@
  *
  * Cada plato entra en su propio CANAL, y los canales se juntan en el MASTER:
  *
- *   Plato A → [Bajos → Medios → Agudos] → Volumen A → Crossfader A ┐
- *                                                                   ├→ Master → altavoces
- *   Plato B → [Bajos → Medios → Agudos] → Volumen B → Crossfader B ┘
+ *   Plato A → [Bajos → Medios → Agudos] → Filtro → Volumen A → Crossfader A ┐
+ *                                                                            ├→ Master → altavoces
+ *   Plato B → [Bajos → Medios → Agudos] → Filtro → Volumen B → Crossfader B ┘
  *
  * Todo son nodos de la Web Audio API conectados en cadena, como cables.
  */
@@ -21,6 +21,9 @@ export class Channel {
   /** Aquí conectamos el plato. */
   readonly input: GainNode;
   private readonly eq: Record<Band, BiquadFilterNode>;
+  /** Filtro DJ: un paso bajo (quita agudos) y un paso alto (quita graves). */
+  private readonly lowpass: BiquadFilterNode;
+  private readonly highpass: BiquadFilterNode;
   private readonly fader: GainNode;
   /** Lo controla el crossfader (no lo toques directamente). */
   readonly xfade: GainNode;
@@ -47,11 +50,48 @@ export class Channel {
     high.frequency.value = 4000;
 
     this.eq = { low, mid, high };
+
+    // Q = 1: una pequeña "resonancia" en la frecuencia de corte, el sonido
+    // típico de filtro de DJ.
+    this.lowpass = ctx.createBiquadFilter();
+    this.lowpass.type = 'lowpass';
+    this.lowpass.Q.value = 1;
+    this.highpass = ctx.createBiquadFilter();
+    this.highpass.type = 'highpass';
+    this.highpass.Q.value = 1;
+    this.setFilter(0);
+
     this.fader = ctx.createGain();
     this.xfade = ctx.createGain();
 
-    // Conectamos la cadena: entrada → bajos → medios → agudos → volumen → crossfader → salida
-    this.input.connect(low).connect(mid).connect(high).connect(this.fader).connect(this.xfade).connect(output);
+    // Conectamos la cadena: entrada → bajos → medios → agudos → filtro → volumen → crossfader → salida
+    this.input
+      .connect(low)
+      .connect(mid)
+      .connect(high)
+      .connect(this.lowpass)
+      .connect(this.highpass)
+      .connect(this.fader)
+      .connect(this.xfade)
+      .connect(output);
+  }
+
+  /**
+   * Filtro DJ, de -1 a 1:
+   *  - 0 (centro): sin filtro.
+   *  - Hacia -1: paso bajo. Quita agudos y suena "lejano", como desde otra sala.
+   *  - Hacia +1: paso alto. Quita graves y suena "fino", ideal para una subida.
+   *
+   * La frecuencia se mueve de forma exponencial (como el oído percibe los
+   * tonos), así todo el recorrido de la rueda se nota igual.
+   */
+  setFilter(value: number): void {
+    const now = this.ctx.currentTime;
+    const v = Math.abs(value) < 0.02 ? 0 : value; // zona muerta en el centro
+    const lowpassHz = v < 0 ? 20000 * Math.pow(150 / 20000, -v) : 22000;
+    const highpassHz = v > 0 ? 20 * Math.pow(6000 / 20, v) : 10;
+    this.lowpass.frequency.setTargetAtTime(lowpassHz, now, 0.02);
+    this.highpass.frequency.setTargetAtTime(highpassHz, now, 0.02);
   }
 
   /** Ecualizador: `db` entre EQ_MIN_DB y EQ_MAX_DB; 0 = sin cambios. */

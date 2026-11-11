@@ -9,6 +9,7 @@
   --wave: #4a5560;
   --wave-played: #2ec4b6;
   --playhead: #ffffff;
+  --cue: #f5a524;
   color-scheme: dark;
 }
 
@@ -180,6 +181,50 @@ body {
   color: #f1a7aa;
 }
 
+/* Acapella / Instrumental: ocupan media fila cada uno. */
+.mode-pad {
+  grid-column: span 2;
+  background: var(--panel-2);
+  border-color: #353a42;
+}
+
+.mode-pad.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+/* --- BPM ---------------------------------------------------------------------- */
+.bpm-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 78px;
+}
+
+.bpm {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Si el tempo está cambiado, el BPM se pinta en color para que se note. */
+.bpm.changed {
+  color: var(--accent);
+}
+
+.bpm-orig {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.filter-knob {
+  padding-top: 8px;
+  border-top: 1px solid #353a42;
+}
+
 .load,
 button {
   background: var(--panel-2);
@@ -232,28 +277,81 @@ button:disabled {
   border-color: var(--accent);
 }
 
-.pitch {
+/* CUE · PLAY · SYNC */
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cue,
+.sync {
+  width: 64px;
+  height: 44px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.cue {
+  color: var(--cue);
+  border-color: var(--cue);
+  touch-action: none; /* en pantallas táctiles, mantener pulsado no hace scroll */
+  user-select: none;
+}
+
+/* Encendido mientras suena desde el punto CUE. */
+.cue.on {
+  background: var(--cue);
+  color: var(--bg);
+}
+
+/* SYNC encendido: los dos platos ya van al mismo BPM. */
+.sync.on {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
+/* SYNC en marcha: parpadea suavemente mientras ajusta el tempo poco a poco. */
+.sync.gliding {
+  border-color: var(--accent);
+  animation: pulse 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes pulse {
+  from {
+    background: var(--panel-2);
+  }
+  to {
+    background: #17343a;
+  }
+}
+
+/* El fader de tempo ocupa su propia fila entera: cuanto más largo, más preciso. */
+.tempo {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex: 1;
+  flex: 1 1 100%;
   min-width: 0;
 }
 
-.pitch label {
+.tempo label {
   color: var(--muted);
   font-size: 14px;
   white-space: nowrap;
 }
 
-.pitch output {
+.tempo output {
   display: inline-block;
   width: 5.5ch;
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 
-.pitch input[type='range'] {
+.tempo input[type='range'] {
   flex: 1;
   min-width: 0;
   accent-color: var(--accent);

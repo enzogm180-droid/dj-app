@@ -37,8 +37,11 @@ export class Waveform {
     this.computePeaks();
   }
 
-  /** Redibuja. `fraction` = cuánto se ha reproducido (0 a 1). */
-  draw(fraction: number): void {
+  /**
+   * Redibuja. `fraction` = cuánto se ha reproducido (0 a 1).
+   * `cue` = dónde está el punto CUE (0 a 1), o null si no hay que dibujarlo.
+   */
+  draw(fraction: number, cue: number | null = null): void {
     const { width, height } = this.canvas;
     const g = this.g;
     const css = getComputedStyle(this.canvas);
@@ -55,6 +58,19 @@ export class Waveform {
       const top = mid - max * mid;
       const h = Math.max(1, (max - min) * mid);
       g.fillRect(x, top, 1, h);
+    }
+
+    if (this.buffers.length && cue !== null) {
+      // Punto CUE: línea naranja con un triangulito arriba.
+      const cueX = Math.floor(cue * width);
+      const ratio = window.devicePixelRatio || 1;
+      g.fillStyle = css.getPropertyValue('--cue');
+      g.fillRect(cueX - ratio / 2, 0, ratio, height);
+      g.beginPath();
+      g.moveTo(cueX - 6 * ratio, 0);
+      g.lineTo(cueX + 6 * ratio, 0);
+      g.lineTo(cueX, 8 * ratio);
+      g.fill();
     }
 
     if (this.buffers.length) {
