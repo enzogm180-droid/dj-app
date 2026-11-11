@@ -14,6 +14,7 @@ import { Mixer } from './audio/mixer';
 import { createDeckView, type DeckView } from './ui/deck-view';
 import { createLibraryView } from './ui/library-view';
 import { createMixerView } from './ui/mixer-view';
+import { ScrollingWave } from './ui/scrolling-wave';
 
 const app = document.querySelector<HTMLElement>('#app')!;
 app.innerHTML = `
@@ -21,6 +22,18 @@ app.innerHTML = `
     <h1>dj-app</h1>
     <span class="hint">A: Q play · W cue — B: P play · O cue — doble clic en un control = valor inicial</span>
   </header>
+  <section class="lanes" aria-label="Ondas de los dos platos">
+    <div class="lane"><span class="lane-letter">A</span><canvas id="lane-a"></canvas></div>
+    <div class="lane"><span class="lane-letter">B</span><canvas id="lane-b"></canvas></div>
+    <div class="legend">
+      <span><i style="background: var(--stem-vocals)"></i>Voces</span>
+      <span><i style="background: var(--stem-other)"></i>Melodía</span>
+      <span><i style="background: var(--stem-drums)"></i>Batería</span>
+      <span><i style="background: var(--stem-bass)"></i>Bajo</span>
+      <span><i style="background: var(--bass-mark)"></i>Tramos con bajo</span>
+      <span class="legend-hint">Rueda del ratón sobre la onda = zoom</span>
+    </div>
+  </section>
   <div class="console">
     <section id="deck-a"></section>
     <section id="mixer"></section>
@@ -42,8 +55,14 @@ const libraryView = createLibraryView(document.getElementById('library')!, (trac
     title: track.title,
     artist: track.artist,
     load: async (deck) => {
-      if (track.stems) await deck.loadStems(await library.readStems(track), track.bpm);
-      else await deck.load(await library.readTrack(track), track.bpm);
+      if (track.stems) {
+        await deck.loadStems(await library.readStems(track), {
+          bpm: track.bpm,
+          lyrics: await library.readLyrics(track),
+        });
+      } else {
+        await deck.load(await library.readTrack(track), { bpm: track.bpm });
+      }
       // Si la canción no tenía BPM guardado, apuntamos el que acaba de calcular el plato.
       if (track.bpm === null && deck.bpm !== null) {
         track.bpm = deck.bpm;
@@ -57,6 +76,10 @@ const getLibrary = () => libraryView.library;
 const viewA: DeckView = createDeckView(document.getElementById('deck-a')!, 'A', deckA, deckB, getLibrary);
 const viewB: DeckView = createDeckView(document.getElementById('deck-b')!, 'B', deckB, deckA, getLibrary);
 createMixerView(document.getElementById('mixer')!, mixer, deckA, deckB);
+
+// Ondas grandes que avanzan con la canción (arriba del todo).
+const laneA = new ScrollingWave(document.getElementById('lane-a') as HTMLCanvasElement, deckA);
+const laneB = new ScrollingWave(document.getElementById('lane-b') as HTMLCanvasElement, deckB);
 
 // --- Teclado ------------------------------------------------------------------
 //   Plato A: Q = play/pausa, W = CUE (mantener)
@@ -82,6 +105,8 @@ window.addEventListener('keyup', (e) => {
 function frame(): void {
   viewA.render();
   viewB.render();
+  laneA.draw();
+  laneB.draw();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

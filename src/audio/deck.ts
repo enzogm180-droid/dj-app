@@ -19,6 +19,7 @@
  * Un AudioBufferSourceNode solo puede arrancarse UNA vez. Por eso, cada vez
  * que pulsamos play creamos fuentes nuevas que empiezan en la posición guardada.
  */
+import { analyze, type TrackVisual } from './analysis';
 import { detectBpm } from './bpm';
 import keylockUrl from './keylock-processor.ts?worker&url';
 
@@ -33,6 +34,19 @@ export const STEM_GROUPS: Record<StemGroup, StemName[]> = {
   instru: ['other', 'bass'], // melodía + bajo
   beat: ['drums'],
 };
+
+/** Una palabra de la letra: cuándo empieza (t), cuándo acaba (e) y el texto (w). */
+export interface LyricWord {
+  t: number;
+  e: number;
+  w: string;
+}
+
+/** Datos extra de una canción que ya conocemos (los guarda el preparador). */
+export interface TrackInfo {
+  bpm?: number | null;
+  lyrics?: LyricWord[] | null;
+}
 
 /** Hay que llamarlo una vez al arrancar la app, antes de crear los platos. */
 export async function setupDecks(ctx: AudioContext): Promise<void> {
@@ -69,6 +83,10 @@ export class Deck extends EventTarget {
 
   /** BPM original de la canción (null si no se ha podido detectar). */
   bpm: number | null = null;
+  /** Análisis para dibujar las ondas (picos de cada stem y tramos de bajo). */
+  visual: TrackVisual | null = null;
+  /** Letra palabra a palabra (si la canción está preparada con letra). */
+  lyrics: LyricWord[] | null = null;
 
   /** Punto CUE: dónde vuelve la canción al soltar el botón CUE (en segundos). */
   cuePoint = 0;
@@ -87,19 +105,19 @@ export class Deck extends EventTarget {
     this.bus.connect(this.keylock).connect(output);
   }
 
-  /** Carga una canción normal (un solo archivo). `bpm`: si ya lo sabemos. */
-  async load(data: ArrayBuffer, bpm?: number | null): Promise<void> {
+  /** Carga una canción normal (un solo archivo). `info`: datos que ya sepamos (BPM…). */
+  async load(data: ArrayBuffer, info: TrackInfo = {}): Promise<void> {
     const buffer = await this.ctx.decodeAudioData(data);
-    this.setLayers([{ name: 'main', buffer }], bpm);
+    this.setLayers([{ name: 'main', buffer }], info);
   }
 
   /** Carga una canción separada en stems (los 4 archivos a la vez). */
-  async loadStems(files: Record<StemName, ArrayBuffer>, bpm?: number | null): Promise<void> {
+  async loadStems(files: Record<StemName, ArrayBuffer>, info: TrackInfo = {}): Promise<void> {
     // Descomprimimos los 4 a la vez para que tarde menos.
     const decoded = await Promise.all(
       STEM_NAMES.map(async (name) => ({ name, buffer: await this.ctx.decodeAudioData(files[name]) })),
     );
-    this.setLayers(decoded, bpm);
+    this.setLayers(decoded, info);
   }
 
   /** Avisa a quien escuche (la interfaz) de que algo ha cambiado. */
@@ -107,7 +125,7 @@ export class Deck extends EventTarget {
     this.dispatchEvent(new Event(type));
   }
 
-  private setLayers(list: { name: Layer['name']; buffer: AudioBuffer }[], bpm?: number | null): void {
+  private setLayers(list: { name: Layer['name']; buffer: AudioBuffer }[], info: TrackInfo): void {
     this.stop();
     for (const layer of this.layers) layer.gain.disconnect();
     this.layers = list.map(({ name, buffer }) => {
@@ -125,7 +143,9 @@ export class Deck extends EventTarget {
     // BPM: si nos lo dan (biblioteca), lo usamos; si no, lo calculamos.
     // Con stems, usamos solo la batería: es más fiable.
     const drums = this.layers.find((l) => l.name === 'drums');
-    this.bpm = bpm ?? detectBpm(drums ? [drums.buffer] : this.buffers);
+    this.bpm = info.bpm ?? detectBpm(drums ? [drums.buffer] : this.buffers);
+    this.visual = analyze(this.layers);
+    this.lyrics = info.lyrics ?? null;
 
     this.emit('loaded');
   }

@@ -2,8 +2,11 @@
 Preparador de stems de dj-app
 =============================
 
-Recorre una carpeta de música, separa cada canción en 4 partes (stems) con la
-IA Demucs y las guarda junto a la música, en una subcarpeta "_stems":
+Recorre una carpeta de música y, para cada canción:
+  1. la separa en 4 partes (stems) con la IA Demucs,
+  2. calcula su BPM (con el stem de batería),
+  3. saca la letra palabra a palabra (con la IA Whisper, sobre el stem de voces),
+y lo guarda todo junto a la música, en una subcarpeta "_stems":
 
     MI-MUSICA/
     ├── canción 1.mp3
@@ -14,7 +17,8 @@ IA Demucs y las guarda junto a la música, en una subcarpeta "_stems":
         │   ├── vocals.opus        (voces)
         │   ├── drums.opus         (batería)
         │   ├── bass.opus          (bajo)
-        │   └── other.opus         (melodía / resto de instrumentos)
+        │   ├── other.opus         (melodía / resto de instrumentos)
+        │   └── letra.json         (la letra, con el momento de cada palabra)
         └── ...
 
 Cómo se usa (desde la carpeta dj-app):
@@ -47,12 +51,15 @@ from demucs.apply import apply_model
 from demucs.pretrained import get_model
 
 from bpm import detect_bpm
+from letra import load_model as load_whisper
+from letra import transcribe
 
 SAMPLE_RATE = 44100  # frecuencia con la que trabaja Demucs
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".m4a", ".aac", ".aiff", ".aif", ".ogg", ".opus"}
 STEMS_DIRNAME = "_stems"
 LIBRARY_FILENAME = "biblioteca.json"
 LIBRARY_VERSION = 1
+LYRICS_FILENAME = "letra.json"
 
 
 # --- Utilidades ------------------------------------------------------------------
@@ -109,6 +116,10 @@ def load_library(path: Path) -> dict:
     return {"version": LIBRARY_VERSION, "tracks": {}}
 
 
+def write_json(path: Path, data) -> None:
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+
 def save_library(library: dict, path: Path) -> None:
     """Guarda el registro de forma segura: primero a un archivo temporal y
     luego lo cambia de golpe. Así, si se va la luz, nunca queda a medias."""
@@ -156,7 +167,25 @@ def main() -> int:
     parser.add_argument("--pasadas", type=int, default=1,
                         help="Más pasadas = un poco más de calidad, pero más lento (por defecto 1)")
     parser.add_argument("--limite", type=int, default=0, help="Procesar como mucho N canciones (0 = todas)")
+    parser.add_argument("--sin-letra", action="store_true", help="No sacar la letra de las canciones")
+    parser.add_argument("--modelo-letra", default="small",
+                        help="Modelo de Whisper para la letra: base (rápido), small (por defecto), "
+                             "medium o large-v3 (mejor, para la torre con tarjeta gráfica)")
+    parser.add_argument("--idioma", default=None,
+                        help="Idioma de las letras, p. ej. 'es'. Si no lo pones, lo adivina en cada canción")
+    parser.add_argument("--rehacer-letra", action="store_true",
+                        help="Vuelve a sacar la letra de TODAS las canciones (p. ej. con un modelo mejor)")
     args = parser.parse_args()
+
+    # El modelo de la letra se carga solo si hace falta, y una única vez.
+    whisper = None
+
+    def lyrics_of(vocals: np.ndarray) -> list[dict]:
+        nonlocal whisper
+        if whisper is None:
+            print(f"\nCargando el modelo de letra '{args.modelo_letra}' (la primera vez se descarga)…", flush=True)
+            whisper = load_whisper(args.modelo_letra)
+        return transcribe(whisper, vocals, SAMPLE_RATE, args.idioma)
 
     music_dir: Path = args.musica.resolve()
     if not music_dir.is_dir():
@@ -202,6 +231,26 @@ def main() -> int:
             entry["bpm"] = detect_bpm(drums.numpy(), SAMPLE_RATE)
             print(f"  {entry['title']}: {entry['bpm']} BPM")
         save_library(library, library_path)
+
+    # Lo mismo con la letra.
+    missing_lyrics = [] if args.sin_letra else [
+        e for e in library["tracks"].values()
+        if (args.rehacer_letra or "lyrics" not in e) and is_done(e, stems_dir)
+    ]
+    if missing_lyrics:
+        print(f"Sacando la letra de {len(missing_lyrics)} canciones ya separadas…")
+        try:
+            for entry in missing_lyrics:
+                t0 = time.time()
+                folder = stems_dir / entry["folder"]
+                words = lyrics_of(decode(folder / entry["stems"]["vocals"]).numpy())
+                write_json(folder / LYRICS_FILENAME, words)
+                entry["lyrics"] = LYRICS_FILENAME
+                save_library(library, library_path)
+                print(f"  {entry['title']}: {len(words)} palabras en {time.time() - t0:.0f} s")
+        except KeyboardInterrupt:
+            print("\nParado. Lo hecho está guardado; vuelve a lanzarlo para continuar.")
+            return 0
     print(f"Ya preparadas: {len(songs) - len(pending)} · Pendientes: {len(pending)}")
     if not pending:
         return 0
@@ -240,6 +289,11 @@ def main() -> int:
                     filename = f"{name}.opus"
                     encode(audio, tmp_dir / filename, args.calidad)
                     files[name] = filename
+                # La letra sale del stem de voces (sin música, Whisper entiende mucho mejor).
+                words = None
+                if not args.sin_letra:
+                    words = lyrics_of(stems["vocals"].numpy())
+                    write_json(tmp_dir / LYRICS_FILENAME, words)
                 shutil.rmtree(final_dir, ignore_errors=True)
                 tmp_dir.rename(final_dir)
 
@@ -250,6 +304,7 @@ def main() -> int:
                     "bpm": bpm,
                     "folder": song_id,
                     "stems": files,
+                    **({"lyrics": LYRICS_FILENAME} if words is not None else {}),
                     "model": args.modelo,
                     "prepared": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 }
@@ -259,7 +314,8 @@ def main() -> int:
                 took = time.time() - t0
                 done += 1
                 size_mb = sum(f.stat().st_size for f in final_dir.iterdir()) / 1e6
-                print(f"OK en {took:.0f} s ({duration / took:.1f}× tiempo real, {size_mb:.1f} MB, {bpm} BPM)")
+                lyrics_info = f", {len(words)} palabras de letra" if words is not None else ""
+                print(f"OK en {took:.0f} s ({duration / took:.1f}× tiempo real, {size_mb:.1f} MB, {bpm} BPM{lyrics_info})")
             except subprocess.CalledProcessError as err:
                 failed += 1
                 print(f"ERROR leyendo/guardando audio: {(err.stderr or b'').decode(errors='ignore').strip()[:200]}")
