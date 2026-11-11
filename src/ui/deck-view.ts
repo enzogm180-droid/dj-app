@@ -242,7 +242,7 @@ export function createDeckView(
     playBtn.disabled = true;
     try {
       await request.load(deck);
-      waveform.setBuffers(deck.buffers);
+      waveform.setVisual(deck.visual);
       titleEl.textContent = request.title;
       artistEl.textContent = request.artist;
       playBtn.disabled = cueBtn.disabled = false;
@@ -266,8 +266,14 @@ export function createDeckView(
         // Si hay biblioteca abierta y esta canción está preparada, usamos sus stems.
         const library = getLibrary();
         const track = library && (await library.findByContent(data));
-        if (library && track) await d.loadStems(await library.readStems(track), track.bpm);
-        else await d.load(data);
+        if (library && track) {
+          await d.loadStems(await library.readStems(track), {
+            bpm: track.bpm,
+            lyrics: await library.readLyrics(track),
+          });
+        } else {
+          await d.load(data);
+        }
       },
     });
   });

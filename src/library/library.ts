@@ -8,7 +8,7 @@
  * La carpeta elegida se recuerda (en el almacenamiento interno del navegador),
  * así no tienes que buscarla cada vez: solo confirmar el permiso con un clic.
  */
-import type { StemName } from '../audio/deck';
+import type { LyricWord, StemName } from '../audio/deck';
 
 const AUDIO_EXTENSIONS = ['.mp3', '.wav', '.flac', '.m4a', '.aac', '.aiff', '.aif', '.ogg', '.opus'];
 const STEMS_DIRNAME = '_stems';
@@ -23,6 +23,8 @@ interface PreparedEntry {
   bpm?: number | null;
   folder: string;
   stems: Record<StemName, string>;
+  /** Archivo con la letra palabra a palabra (si se sacó). */
+  lyrics?: string;
 }
 
 export interface Track {
@@ -88,6 +90,18 @@ export class Library {
       ),
     );
     return Object.fromEntries(names.map((n, i) => [n, buffers[i]])) as Record<StemName, ArrayBuffer>;
+  }
+
+  /** Lee la letra de una canción preparada (o null si no tiene). */
+  async readLyrics(track: Track): Promise<LyricWord[] | null> {
+    const entry = track.stems;
+    if (!entry?.lyrics) return null;
+    try {
+      const file = await getFile(this.root, `${STEMS_DIRNAME}/${entry.folder}/${entry.lyrics}`);
+      return JSON.parse(await file.text());
+    } catch {
+      return null; // si falta o está mal, seguimos sin letra
+    }
   }
 
   /**

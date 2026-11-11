@@ -1,17 +1,21 @@
 /**
- * Dibuja la forma de onda de una canción en un <canvas>.
+ * Onda COMPLETA de la canción (la pequeña de cada plato), con:
+ *  - los stems en colores (ver stem-draw.ts),
+ *  - la parte ya escuchada un poco más oscura,
+ *  - rectangulitos rojos abajo donde suena el bajo,
+ *  - el punto CUE (línea naranja) y el cabezal (línea blanca).
  *
- * Idea: dividimos la canción en tantos trozos como píxeles de ancho tenga el
- * canvas, y de cada trozo guardamos el pico más alto y el más bajo. Luego
- * dibujamos una barra vertical por píxel entre esos dos picos.
+ * Al hacer clic en ella, la canción salta a ese punto.
  */
+import type { TrackVisual } from '../audio/analysis';
+import { columnsFor, drawStacked, layerColors } from './stem-draw';
+
 export class Waveform {
   private readonly canvas: HTMLCanvasElement;
   private readonly g: CanvasRenderingContext2D;
-  /** Una o varias capas (con stems, son 4 que sumamos para dibujar la onda). */
-  private buffers: AudioBuffer[] = [];
-  /** Para cada columna de píxeles: [mínimo, máximo] entre -1 y 1. */
-  private peaks: Float32Array = new Float32Array(0);
+  private visual: TrackVisual | null = null;
+  /** Columnas ya calculadas (solo cambian al cargar canción o cambiar el tamaño). */
+  private columns: ReturnType<typeof columnsFor> = [];
 
   /** Se llama al hacer clic: recibe la posición de 0 (inicio) a 1 (final). */
   onSeek: ((fraction: number) => void) | null = null;
@@ -23,7 +27,7 @@ export class Waveform {
     this.g = g;
 
     canvas.addEventListener('pointerdown', (e) => {
-      if (!this.buffers.length) return;
+      if (!this.visual) return;
       const rect = canvas.getBoundingClientRect();
       this.onSeek?.((e.clientX - rect.left) / rect.width);
     });
@@ -32,9 +36,9 @@ export class Waveform {
     new ResizeObserver(() => this.resize()).observe(canvas);
   }
 
-  setBuffers(buffers: AudioBuffer[]): void {
-    this.buffers = buffers;
-    this.computePeaks();
+  setVisual(visual: TrackVisual | null): void {
+    this.visual = visual;
+    this.compute();
   }
 
   /**
@@ -44,26 +48,31 @@ export class Waveform {
   draw(fraction: number, cue: number | null = null): void {
     const { width, height } = this.canvas;
     const g = this.g;
-    const css = getComputedStyle(this.canvas);
     g.clearRect(0, 0, width, height);
+    const visual = this.visual;
+    if (!visual) return;
 
-    const mid = height / 2;
-    const playedX = Math.floor(fraction * width);
-    const columns = this.peaks.length / 2;
+    const ratio = window.devicePixelRatio || 1;
+    const css = getComputedStyle(this.canvas);
+    const bassStrip = 4 * ratio;
+    const waveHeight = height - bassStrip - ratio;
+    drawStacked(g, this.columns, layerColors(this.canvas), visual.maxTotal, waveHeight / 2, waveHeight / 2);
 
-    for (let x = 0; x < columns; x++) {
-      const min = this.peaks[x * 2];
-      const max = this.peaks[x * 2 + 1];
-      g.fillStyle = x < playedX ? css.getPropertyValue('--wave-played') : css.getPropertyValue('--wave');
-      const top = mid - max * mid;
-      const h = Math.max(1, (max - min) * mid);
-      g.fillRect(x, top, 1, h);
+    // Tramos de bajo: rectangulitos abajo del todo.
+    g.fillStyle = css.getPropertyValue('--bass-mark');
+    for (const [a, b] of visual.bass) {
+      const x0 = (a / visual.duration) * width;
+      g.fillRect(x0, height - bassStrip, Math.max(1, (b / visual.duration) * width - x0), bassStrip);
     }
 
-    if (this.buffers.length && cue !== null) {
+    // Lo ya escuchado, más oscuro.
+    const playedX = Math.floor(fraction * width);
+    g.fillStyle = 'rgba(13, 15, 18, 0.55)';
+    g.fillRect(0, 0, playedX, waveHeight);
+
+    if (cue !== null) {
       // Punto CUE: línea naranja con un triangulito arriba.
       const cueX = Math.floor(cue * width);
-      const ratio = window.devicePixelRatio || 1;
       g.fillStyle = css.getPropertyValue('--cue');
       g.fillRect(cueX - ratio / 2, 0, ratio, height);
       g.beginPath();
@@ -73,11 +82,9 @@ export class Waveform {
       g.fill();
     }
 
-    if (this.buffers.length) {
-      // Cabezal: la línea que marca por dónde va la canción.
-      g.fillStyle = css.getPropertyValue('--playhead');
-      g.fillRect(playedX - 1, 0, 2, height);
-    }
+    // Cabezal: la línea que marca por dónde va la canción.
+    g.fillStyle = css.getPropertyValue('--playhead');
+    g.fillRect(playedX - ratio, 0, 2 * ratio, height);
   }
 
   private resize(): void {
@@ -85,36 +92,17 @@ export class Waveform {
     const rect = this.canvas.getBoundingClientRect();
     this.canvas.width = Math.max(1, Math.round(rect.width * ratio));
     this.canvas.height = Math.max(1, Math.round(rect.height * ratio));
-    this.computePeaks();
+    this.compute();
   }
 
-  private computePeaks(): void {
-    const columns = this.canvas.width;
-    this.peaks = new Float32Array(columns * 2);
-    if (!this.buffers.length) return;
-
-    // Para cada canal (izquierdo y derecho), los datos de todas las capas.
-    // Con stems, sumamos las 4 capas muestra a muestra: así sale la canción entera.
-    const length = Math.min(...this.buffers.map((b) => b.length));
-    const channelCount = Math.min(...this.buffers.map((b) => b.numberOfChannels));
-    const channels = Array.from({ length: channelCount }, (_, c) => this.buffers.map((b) => b.getChannelData(c)));
-    const samplesPerColumn = Math.max(1, Math.floor(length / columns));
-
-    for (let x = 0; x < columns; x++) {
-      let min = 0;
-      let max = 0;
-      const start = x * samplesPerColumn;
-      const end = Math.min(start + samplesPerColumn, length);
-      for (const layers of channels) {
-        for (let i = start; i < end; i++) {
-          let v = 0;
-          for (const data of layers) v += data[i];
-          if (v < min) min = v;
-          if (v > max) max = v;
-        }
-      }
-      this.peaks[x * 2] = min;
-      this.peaks[x * 2 + 1] = max;
+  private compute(): void {
+    const visual = this.visual;
+    if (!visual) {
+      this.columns = [];
+      return;
     }
+    const width = this.canvas.width;
+    const secondsPerPixel = visual.duration / width;
+    this.columns = columnsFor(visual, width, (x) => x * secondsPerPixel, secondsPerPixel);
   }
 }

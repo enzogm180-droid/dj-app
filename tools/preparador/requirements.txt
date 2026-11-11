@@ -8,3 +8,7 @@ torch==2.5.1
 torchaudio==2.5.1
 demucs==4.0.1
 numpy<2
+
+# Letra: convierte la voz (stem de voces) en texto con marcas de tiempo.
+faster-whisper==1.1.1
+requests
