@@ -25,7 +25,7 @@ body {
 }
 
 #app {
-  max-width: 1100px;
+  max-width: 1500px;
   margin: 0 auto;
   padding: 16px;
 }
@@ -34,11 +34,13 @@ body {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  gap: 16px;
   margin-bottom: 16px;
 }
 
 .topbar h1 {
   margin: 0;
+  white-space: nowrap;
   font-size: 20px;
   letter-spacing: 0.04em;
 }
@@ -48,7 +50,22 @@ body {
   font-size: 13px;
 }
 
-.deck {
+/* Distribución: plato A | mixer | plato B. En pantallas estrechas, uno debajo de otro. */
+.console {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .console {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.deck,
+.mixer {
   background: var(--panel);
   border-radius: 10px;
   padding: 16px;
@@ -147,7 +164,7 @@ button:disabled {
   align-items: center;
   gap: 12px;
   flex: 1;
-  min-width: 260px;
+  min-width: 0;
 }
 
 .pitch label {
@@ -165,10 +182,95 @@ button:disabled {
 
 .pitch input[type='range'] {
   flex: 1;
+  min-width: 0;
   accent-color: var(--accent);
 }
 
 .small {
   padding: 4px 10px;
   font-size: 13px;
+}
+
+/* --- Mixer ------------------------------------------------------------------ */
+.mixer input[type='range'] {
+  accent-color: var(--accent);
+  margin: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.strips {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.strip {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.strip-letter {
+  text-align: center;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.eq {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.eq output {
+  float: right;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Banda quitada del todo ("kill"): en rojo para que se note. */
+.eq input.killed {
+  accent-color: #e5484d;
+}
+
+/* Fader de volumen vertical (abajo = 0, arriba = máximo). */
+.fader {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  align-self: center;
+  width: auto !important;
+  height: 140px;
+  margin-top: 6px !important;
+}
+
+.master {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.master input {
+  flex: 1;
+}
+
+.xfader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #353a42;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.xfader input {
+  flex: 1;
 }

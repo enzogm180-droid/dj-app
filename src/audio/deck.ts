@@ -6,7 +6,7 @@
  * ni de pantallas; eso lo hace la interfaz (main.ts).
  *
  * Cómo suena (Web Audio API):
- *   AudioBufferSourceNode  →  GainNode (volumen)  →  salida (altavoces)
+ *   AudioBufferSourceNode  →  GainNode (ganancia)  →  canal del mixer
  *
  * Un AudioBufferSourceNode solo puede arrancarse UNA vez. Por eso, cada vez
  * que pulsamos play creamos uno nuevo que empieza en la posición guardada.
@@ -29,10 +29,11 @@ export class Deck {
   /** Se llama cuando la canción llega al final sola. */
   onEnded: (() => void) | null = null;
 
-  constructor(ctx: AudioContext) {
+  /** `output` = a dónde mandamos el sonido (normalmente, un canal del mixer). */
+  constructor(ctx: AudioContext, output: AudioNode) {
     this.ctx = ctx;
     this.gain = ctx.createGain();
-    this.gain.connect(ctx.destination);
+    this.gain.connect(output);
   }
 
   /** Lee un archivo de audio del PC y lo convierte en sonido listo para usar. */
