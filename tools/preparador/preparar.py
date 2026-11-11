@@ -46,6 +46,8 @@ import torch
 from demucs.apply import apply_model
 from demucs.pretrained import get_model
 
+from bpm import detect_bpm
+
 SAMPLE_RATE = 44100  # frecuencia con la que trabaja Demucs
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".m4a", ".aac", ".aiff", ".aif", ".ogg", ".opus"}
 STEMS_DIRNAME = "_stems"
@@ -190,7 +192,19 @@ def main() -> int:
     if moved:
         save_library(library, library_path)
         print(f"Actualizada la ruta de {moved} canciones renombradas o movidas")
+
+    # Canciones separadas con una versión anterior del preparador, sin BPM: lo calculamos ahora.
+    missing_bpm = [e for e in library["tracks"].values() if "bpm" not in e and is_done(e, stems_dir)]
+    if missing_bpm:
+        print(f"Calculando el BPM de {len(missing_bpm)} canciones ya separadas…")
+        for entry in missing_bpm:
+            drums = decode(stems_dir / entry["folder"] / entry["stems"]["drums"])
+            entry["bpm"] = detect_bpm(drums.numpy(), SAMPLE_RATE)
+            print(f"  {entry['title']}: {entry['bpm']} BPM")
+        save_library(library, library_path)
     print(f"Ya preparadas: {len(songs) - len(pending)} · Pendientes: {len(pending)}")
+    if not pending:
+        return 0
     if args.limite:
         pending = pending[: args.limite]
     if not pending:
@@ -212,6 +226,8 @@ def main() -> int:
                 wav = decode(song)
                 duration = wav.shape[1] / SAMPLE_RATE
                 stems = separate(model, wav, device, args.pasadas)
+                # El BPM se calcula con la batería: sin voces ni melodía es más fiable.
+                bpm = detect_bpm(stems["drums"].numpy(), SAMPLE_RATE)
 
                 # Escribimos en una carpeta temporal y la renombramos al final:
                 # una canción solo aparece como "hecha" si está completa.
@@ -231,6 +247,7 @@ def main() -> int:
                     "file": rel,
                     **read_tags(song),
                     "duration": round(duration, 2),
+                    "bpm": bpm,
                     "folder": song_id,
                     "stems": files,
                     "model": args.modelo,
@@ -242,7 +259,7 @@ def main() -> int:
                 took = time.time() - t0
                 done += 1
                 size_mb = sum(f.stat().st_size for f in final_dir.iterdir()) / 1e6
-                print(f"OK en {took:.0f} s ({duration / took:.1f}× tiempo real, {size_mb:.1f} MB)")
+                print(f"OK en {took:.0f} s ({duration / took:.1f}× tiempo real, {size_mb:.1f} MB, {bpm} BPM)")
             except subprocess.CalledProcessError as err:
                 failed += 1
                 print(f"ERROR leyendo/guardando audio: {(err.stderr or b'').decode(errors='ignore').strip()[:200]}")

@@ -20,6 +20,7 @@ interface PreparedEntry {
   title: string;
   artist: string;
   duration: number;
+  bpm?: number | null;
   folder: string;
   stems: Record<StemName, string>;
 }
@@ -31,6 +32,8 @@ export interface Track {
   artist: string;
   /** Duración en segundos (solo la sabemos si está preparada). */
   duration: number | null;
+  /** BPM: lo calcula el preparador, o la app al cargar la canción por primera vez. */
+  bpm: number | null;
   /** Si está separada: dónde están sus stems. */
   stems: PreparedEntry | null;
 }
@@ -62,6 +65,7 @@ export class Library {
         title: entry?.title || name,
         artist: entry?.artist ?? '',
         duration: entry?.duration ?? null,
+        bpm: entry?.bpm ?? null,
         stems: entry,
       });
     }
