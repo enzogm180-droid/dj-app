@@ -1,0 +1,10 @@
+# Librerías que necesita el preparador de stems.
+# Se instalan con:  .venv\Scripts\pip install -r requirements.txt
+#
+# torch = el motor de IA (versión para procesador; en la torre con NVIDIA
+# instalaremos la versión para tarjeta gráfica, que es mucho más rápida).
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1
+torchaudio==2.5.1
+demucs==4.0.1
+numpy<2

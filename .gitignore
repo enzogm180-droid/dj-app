@@ -18,3 +18,7 @@ dist/
 .claude/
 .vscode/
 *.log
+
+# Entorno de Python del preparador (se regenera con pip install)
+.venv/
+__pycache__/
