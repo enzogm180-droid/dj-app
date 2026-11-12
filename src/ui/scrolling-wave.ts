@@ -8,7 +8,7 @@
  *   ┌──────────────────────────────────────────────┐
  *   │ letra   y   que   se   va      │   cantando   │ ← palabras en su momento
  *   │ ▁▃▅▇█▇▅▃▁▃▅▇█▇▅▃▁▃▅▇█▇▅▃▁▃▅▇█▇│▅▃▁▃▅▇█▇▅▃▁▃▅ │ ← stems en colores
- *   │ ████████████████       ███████│█████████████ │ ← tramos de bajo
+ *   │ ▮ ▮ ▮ ▮ ▮ ▮ ▮ ▮        ▮ ▮ ▮ ▮│▮ ▮ ▮ ▮ ▮ ▮ ▮ │ ← un rectangulito por boom
  *   └──────────────────────────────────────────────┘
  *                                  ↑ ahora
  *
@@ -74,42 +74,70 @@ export class ScrollingWave {
     const timeAt = (x: number) => position + (x - center) / pxPerSecond;
     const xAt = (t: number) => center + (t - position) * pxPerSecond;
 
-    // Zonas: letra arriba, onda en medio, tramos de bajo abajo.
+    // Zonas: letra arriba, onda en medio, booms abajo.
     const lyricsH = 20 * ratio;
-    const bassH = 6 * ratio;
+    const bassH = 8 * ratio;
     const gap = 3 * ratio;
     const waveTop = lyricsH;
     const waveH = height - lyricsH - bassH - gap;
     const mid = waveTop + waveH / 2;
 
-    // 1. Ondas de los stems.
+    // 1. Rejilla de golpes: una rayita en cada golpe (debajo de la onda).
+    if (this.deck.bpm !== null && this.deck.firstBeat !== null) {
+      const beat = this.deck.beatLength;
+      const first = this.deck.firstBeat;
+      g.fillStyle = 'rgba(255, 255, 255, 0.12)';
+      for (let n = Math.ceil((timeAt(0) - first) / beat); first + n * beat < timeAt(width); n++) {
+        g.fillRect(Math.round(xAt(first + n * beat)), waveTop, ratio, waveH);
+      }
+    }
+
+    // 2. Loop: la zona que se repite, resaltada. Y el punto IN si está marcado.
+    const loop = this.deck.loop;
+    if (loop) {
+      g.fillStyle = css.getPropertyValue('--loop');
+      g.globalAlpha = 0.22;
+      g.fillRect(xAt(loop.start), waveTop, (loop.end - loop.start) * pxPerSecond, waveH);
+      g.globalAlpha = 1;
+      g.fillRect(xAt(loop.start) - ratio, waveTop, 2 * ratio, waveH);
+      g.fillRect(xAt(loop.end) - ratio, waveTop, 2 * ratio, waveH);
+    }
+    if (this.deck.loopIn !== null) {
+      g.fillStyle = css.getPropertyValue('--loop');
+      g.fillRect(xAt(this.deck.loopIn) - ratio, waveTop, 2 * ratio, waveH);
+    }
+
+    // 3. Ondas de los stems.
     const columns = columnsFor(visual, width, timeAt, 1 / pxPerSecond);
     drawStacked(g, columns, layerColors(this.canvas), visual.maxTotal, mid, waveH / 2);
 
-    // 2. Tramos de bajo.
+    // 4. Booms: un rectangulito por cada golpe grave (más opaco cuanto más fuerte).
     g.fillStyle = css.getPropertyValue('--bass-mark');
-    for (const [a, b] of visual.bass) {
-      const x0 = xAt(a);
-      const x1 = xAt(b);
-      if (x1 < 0 || x0 > width) continue;
-      g.fillRect(x0, height - bassH, x1 - x0, bassH);
+    const boomW = Math.max(3 * ratio, 0.04 * pxPerSecond);
+    for (const boom of visual.booms) {
+      const x = xAt(boom.t);
+      if (x < -boomW) continue;
+      if (x > width) break;
+      g.globalAlpha = 0.35 + 0.65 * boom.s;
+      g.fillRect(x, height - bassH, boomW, bassH);
     }
+    g.globalAlpha = 1;
 
-    // 3. Lo ya escuchado (a la izquierda del cabezal), más oscuro.
+    // 5. Lo ya escuchado (a la izquierda del cabezal), más oscuro.
     g.fillStyle = 'rgba(13, 15, 18, 0.45)';
     g.fillRect(0, waveTop, center, waveH);
 
-    // 4. Punto CUE.
+    // 6. Punto CUE.
     const cueX = xAt(this.deck.cuePoint);
     if (cueX >= 0 && cueX <= width) {
       g.fillStyle = css.getPropertyValue('--cue');
       g.fillRect(cueX - ratio / 2, waveTop, ratio, waveH);
     }
 
-    // 5. Letra: cada palabra en su momento. La que se canta ahora, resaltada.
+    // 7. Letra: cada palabra en su momento. La que se canta ahora, resaltada.
     this.drawLyrics(position, xAt, lyricsH, ratio, css);
 
-    // 6. Cabezal fijo en el centro.
+    // 8. Cabezal fijo en el centro.
     g.fillStyle = css.getPropertyValue('--playhead');
     g.fillRect(center - ratio, 0, 2 * ratio, height);
   }

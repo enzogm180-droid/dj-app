@@ -5,9 +5,10 @@
  *    Con stems hay 4 capas (voces, melodía, bajo, batería), así podemos
  *    pintar cada una de un color y ver cuándo entra cada cosa.
  *
- *  - TRAMOS DE BAJO: en qué partes de la canción suena el bajo y en cuáles
- *    no (los "breaks"). Sirve para saber cuándo meter la otra canción:
- *    normalmente se entra cuando el bajo "rompe" o se cambia de bajo a bajo.
+ *  - BOOMS: cada golpe grave (bombo y bajo). Se dibuja un rectangulito por
+ *    cada uno debajo de la onda: donde no hay rectangulitos, el bajo "rompe"
+ *    (un break); donde vuelven, entra el bajo. Sirve para saber cuándo meter
+ *    la otra canción y para cuadrar un boom con otro.
  *
  * Se calcula una vez al cargar la canción (tarda unas décimas de segundo).
  */
@@ -18,14 +19,20 @@ export const PEAKS_PER_SECOND = 150;
 
 export type LayerName = StemName | 'main';
 
+/** Un boom: en qué segundo suena (t) y cómo de fuerte, de 0 a 1 (s). */
+export interface Boom {
+  t: number;
+  s: number;
+}
+
 export interface TrackVisual {
   duration: number;
   /** Picos (de 0 a 1) de cada capa, un valor por trocito. */
   peaks: Partial<Record<LayerName, Float32Array>>;
   /** El mayor pico de la suma de todas las capas (para escalar la onda). */
   maxTotal: number;
-  /** Tramos (en segundos) en los que suena el bajo. Vacío si no hay stems. */
-  bass: [number, number][];
+  /** Cada golpe grave de la canción. */
+  booms: Boom[];
 }
 
 export function analyze(layers: { name: LayerName; buffer: AudioBuffer }[]): TrackVisual {
@@ -59,66 +66,74 @@ export function analyze(layers: { name: LayerName; buffer: AudioBuffer }[]): Tra
     if (total > maxTotal) maxTotal = total;
   }
 
-  const bassLayer = layers.find((l) => l.name === 'bass');
-  return { duration, peaks, maxTotal, bass: bassLayer ? bassSections(bassLayer.buffer) : [] };
+  // Los booms salen de la batería + el bajo (bombo y bajos de 808). Sin stems,
+  // de la canción entera (funciona, pero se cuelan más cosas).
+  const low = layers.filter((l) => l.name === 'drums' || l.name === 'bass');
+  const boomSource = (low.length ? low : layers).map((l) => l.buffer);
+  return { duration, peaks, maxTotal, booms: findBooms(boomSource) };
 }
 
 /**
- * Busca los tramos con bajo:
- *  1. Medimos la energía del bajo cada 0,1 s y la suavizamos (media de 1 s),
- *     para que no cuente cada nota suelta sino "si hay bajo o no".
- *  2. Comparamos con lo fuerte que suele sonar el bajo en ESTA canción: se
- *     enciende al pasar del 35 % y se apaga al bajar del 20 % (dos umbrales
- *     distintos para que no parpadee en el límite).
- *  3. Juntamos huecos de menos de 1 s y quitamos tramos de menos de 2 s.
+ * Busca cada golpe grave:
+ *  1. Nos quedamos solo con los graves (filtro paso bajo a ~120 Hz).
+ *  2. Medimos su energía cada 5 ms y vemos cuándo SUBE de golpe.
+ *  3. Cada subida que sea un pico (la mayor en ±60 ms) y suficientemente
+ *     fuerte para ESTA canción es un boom. Entre dos booms, mínimo 90 ms.
  */
-function bassSections(buffer: AudioBuffer): [number, number][] {
-  const hop = Math.round(buffer.sampleRate / 10); // 0,1 s
-  const frames = Math.floor(buffer.length / hop);
-  const channels = Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c));
+function findBooms(buffers: AudioBuffer[]): Boom[] {
+  const sampleRate = buffers[0].sampleRate;
+  const length = Math.min(...buffers.map((b) => b.length));
+  const channels = buffers.flatMap((b) => Array.from({ length: b.numberOfChannels }, (_, c) => b.getChannelData(c)));
+  const hop = Math.round(sampleRate / 200); // 5 ms
+  const frames = Math.floor(length / hop);
+
+  // 1 y 2: energía de los graves por trocito.
+  const alpha = 1 - Math.exp((-2 * Math.PI * 120) / sampleRate);
+  let lp1 = 0;
+  let lp2 = 0; // dos filtros seguidos: corta mejor los agudos
   const energy = new Float32Array(frames);
   for (let f = 0; f < frames; f++) {
-    let sum = 0;
-    for (const data of channels) {
-      for (let s = f * hop; s < (f + 1) * hop; s++) sum += data[s] * data[s];
+    let e = 0;
+    for (let i = f * hop; i < (f + 1) * hop; i++) {
+      let v = 0;
+      for (const ch of channels) v += ch[i];
+      lp1 += alpha * (v - lp1);
+      lp2 += alpha * (lp1 - lp2);
+      e += lp2 * lp2;
     }
-    energy[f] = Math.sqrt(sum / (hop * channels.length));
+    energy[f] = Math.log1p(1000 * (e / hop));
   }
 
-  // Media móvil de 1 s (10 trocitos).
-  const smooth = new Float32Array(frames);
-  let acc = 0;
-  for (let f = 0; f < frames; f++) {
-    acc += energy[f];
-    if (f >= 10) acc -= energy[f - 10];
-    smooth[f] = acc / Math.min(f + 1, 10);
-  }
+  // Subida de energía respecto a hace 15 ms (más estable que contra el trocito anterior).
+  const rise = new Float32Array(frames);
+  for (let f = 3; f < frames; f++) rise[f] = Math.max(0, energy[f] - energy[f - 3]);
 
-  // "Lo fuerte que suele sonar": el percentil 90 (ignora picos sueltos).
-  const sorted = Array.from(smooth).sort((a, b) => a - b);
-  const reference = sorted[Math.floor(sorted.length * 0.9)] || 0;
-  if (reference < 1e-4) return [];
-  const on = reference * 0.35;
-  const off = reference * 0.2;
+  // 3: umbral relativo a esta canción (percentil 98 de las subidas).
+  const sorted = Array.from(rise).filter((v) => v > 0).sort((a, b) => a - b);
+  if (!sorted.length) return [];
+  const reference = sorted[Math.floor(sorted.length * 0.98)];
+  const threshold = reference * 0.3;
+  const window = 12; // ±60 ms
+  const minGap = 18; // 90 ms
 
-  let sections: [number, number][] = [];
-  let start: number | null = null;
-  for (let f = 0; f < frames; f++) {
-    if (start === null && smooth[f] > on) start = f;
-    else if (start !== null && smooth[f] < off) {
-      sections.push([start / 10, f / 10]);
-      start = null;
+  const booms: Boom[] = [];
+  let last = -Infinity;
+  for (let f = window; f < frames - window; f++) {
+    const v = rise[f];
+    if (v < threshold || f - last < minGap) continue;
+    let isPeak = true;
+    for (let k = f - window; k <= f + window; k++) {
+      if (rise[k] > v) {
+        isPeak = false;
+        break;
+      }
     }
+    if (!isPeak) continue;
+    // El golpe empieza un poco antes del pico de subida: retrocedemos hasta que la subida casi desaparece.
+    let start = f;
+    while (start > f - 6 && rise[start - 1] > v * 0.15) start--;
+    booms.push({ t: (start * hop) / sampleRate, s: Math.min(1, v / reference) });
+    last = f;
   }
-  if (start !== null) sections.push([start / 10, frames / 10]);
-
-  // Juntar huecos cortos y quitar tramos cortos.
-  const merged: [number, number][] = [];
-  for (const s of sections) {
-    const last = merged[merged.length - 1];
-    if (last && s[0] - last[1] < 1) last[1] = s[1];
-    else merged.push([s[0], s[1]]);
-  }
-  sections = merged.filter(([a, b]) => b - a >= 2);
-  return sections;
+  return booms;
 }

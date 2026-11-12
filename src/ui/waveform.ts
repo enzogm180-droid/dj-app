@@ -2,7 +2,8 @@
  * Onda COMPLETA de la canción (la pequeña de cada plato), con:
  *  - los stems en colores (ver stem-draw.ts),
  *  - la parte ya escuchada un poco más oscura,
- *  - rectangulitos rojos abajo donde suena el bajo,
+ *  - una rayita naranja abajo por cada boom (golpe grave),
+ *  - la zona del loop, si hay uno, resaltada,
  *  - el punto CUE (línea naranja) y el cabezal (línea blanca).
  *
  * Al hacer clic en ella, la canción salta a ese punto.
@@ -45,7 +46,7 @@ export class Waveform {
    * Redibuja. `fraction` = cuánto se ha reproducido (0 a 1).
    * `cue` = dónde está el punto CUE (0 a 1), o null si no hay que dibujarlo.
    */
-  draw(fraction: number, cue: number | null = null): void {
+  draw(fraction: number, cue: number | null = null, loop: { start: number; end: number } | null = null): void {
     const { width, height } = this.canvas;
     const g = this.g;
     g.clearRect(0, 0, width, height);
@@ -58,11 +59,22 @@ export class Waveform {
     const waveHeight = height - bassStrip - ratio;
     drawStacked(g, this.columns, layerColors(this.canvas), visual.maxTotal, waveHeight / 2, waveHeight / 2);
 
-    // Tramos de bajo: rectangulitos abajo del todo.
+    // Booms: una rayita por cada golpe grave, abajo del todo.
     g.fillStyle = css.getPropertyValue('--bass-mark');
-    for (const [a, b] of visual.bass) {
-      const x0 = (a / visual.duration) * width;
-      g.fillRect(x0, height - bassStrip, Math.max(1, (b / visual.duration) * width - x0), bassStrip);
+    for (const boom of visual.booms) {
+      g.globalAlpha = 0.35 + 0.65 * boom.s;
+      g.fillRect(Math.floor((boom.t / visual.duration) * width), height - bassStrip, ratio, bassStrip);
+    }
+    g.globalAlpha = 1;
+
+    // Loop: la zona que se repite, resaltada.
+    if (loop) {
+      const x0 = (loop.start / visual.duration) * width;
+      const x1 = (loop.end / visual.duration) * width;
+      g.fillStyle = css.getPropertyValue('--loop');
+      g.globalAlpha = 0.3;
+      g.fillRect(x0, 0, Math.max(ratio * 2, x1 - x0), waveHeight);
+      g.globalAlpha = 1;
     }
 
     // Lo ya escuchado, más oscuro.

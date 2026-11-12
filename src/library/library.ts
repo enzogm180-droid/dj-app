@@ -21,6 +21,8 @@ interface PreparedEntry {
   artist: string;
   duration: number;
   bpm?: number | null;
+  /** Segundo del primer golpe (rejilla de golpes). */
+  beat?: number | null;
   folder: string;
   stems: Record<StemName, string>;
   /** Archivo con la letra palabra a palabra (si se sacó). */
@@ -36,6 +38,8 @@ export interface Track {
   duration: number | null;
   /** BPM: lo calcula el preparador, o la app al cargar la canción por primera vez. */
   bpm: number | null;
+  /** Segundo del primer golpe (si lo sabemos). */
+  beat: number | null;
   /** Si está separada: dónde están sus stems. */
   stems: PreparedEntry | null;
 }
@@ -68,6 +72,7 @@ export class Library {
         artist: entry?.artist ?? '',
         duration: entry?.duration ?? null,
         bpm: entry?.bpm ?? null,
+        beat: entry?.beat ?? null,
         stems: entry,
       });
     }

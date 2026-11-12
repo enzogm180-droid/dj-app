@@ -20,7 +20,7 @@
  * que pulsamos play creamos fuentes nuevas que empiezan en la posición guardada.
  */
 import { analyze, type TrackVisual } from './analysis';
-import { detectBpm } from './bpm';
+import { detectBeats } from './bpm';
 import keylockUrl from './keylock-processor.ts?worker&url';
 
 /** Las 4 partes que genera el preparador. */
@@ -45,6 +45,8 @@ export interface LyricWord {
 /** Datos extra de una canción que ya conocemos (los guarda el preparador). */
 export interface TrackInfo {
   bpm?: number | null;
+  /** Segundo del primer golpe (rejilla de golpes). */
+  beat?: number | null;
   lyrics?: LyricWord[] | null;
 }
 
@@ -83,7 +85,9 @@ export class Deck extends EventTarget {
 
   /** BPM original de la canción (null si no se ha podido detectar). */
   bpm: number | null = null;
-  /** Análisis para dibujar las ondas (picos de cada stem y tramos de bajo). */
+  /** Segundo del primer golpe: con el BPM forma la "rejilla de golpes". */
+  firstBeat: number | null = null;
+  /** Análisis para dibujar las ondas (picos de cada stem y booms). */
   visual: TrackVisual | null = null;
   /** Letra palabra a palabra (si la canción está preparada con letra). */
   lyrics: LyricWord[] | null = null;
@@ -95,6 +99,13 @@ export class Deck extends EventTarget {
 
   /** Cambio de tempo gradual en curso (SYNC), si lo hay. */
   private glideTimer: ReturnType<typeof setInterval> | null = null;
+  /** Empujoncito de tempo en curso para cuadrar los golpes (y el tempo al que volver). */
+  private nudge: { timer: ReturnType<typeof setTimeout>; base: number } | null = null;
+
+  /** Loop activo: el trozo [start, end) (en segundos) se repite sin parar. */
+  loop: { start: number; end: number } | null = null;
+  /** Punto IN marcado, esperando a que pulses OUT. */
+  loopIn: number | null = null;
 
   /** `output` = a dónde mandamos el sonido (normalmente, un canal del mixer). */
   constructor(ctx: AudioContext, output: AudioNode) {
@@ -121,7 +132,7 @@ export class Deck extends EventTarget {
   }
 
   /** Avisa a quien escuche (la interfaz) de que algo ha cambiado. */
-  private emit(type: 'loaded' | 'ended' | 'stems' | 'tempo' | 'transport'): void {
+  private emit(type: 'loaded' | 'ended' | 'stems' | 'tempo' | 'transport' | 'loop'): void {
     this.dispatchEvent(new Event(type));
   }
 
@@ -139,11 +150,18 @@ export class Deck extends EventTarget {
     this.offset = 0;
     this.cuePoint = 0;
     this.previewing = false;
+    this.loop = null;
+    this.loopIn = null;
 
-    // BPM: si nos lo dan (biblioteca), lo usamos; si no, lo calculamos.
-    // Con stems, usamos solo la batería: es más fiable.
+    // Rejilla de golpes (BPM + primer golpe): si nos la da la biblioteca, la
+    // usamos; si no, la calculamos. Con stems, solo con la batería: es más fiable.
     const drums = this.layers.find((l) => l.name === 'drums');
-    this.bpm = info.bpm ?? detectBpm(drums ? [drums.buffer] : this.buffers);
+    const grid =
+      info.bpm != null && info.beat != null
+        ? { bpm: info.bpm, firstBeat: info.beat }
+        : detectBeats(drums ? [drums.buffer] : this.buffers);
+    this.bpm = grid?.bpm ?? null;
+    this.firstBeat = grid?.firstBeat ?? null;
     this.visual = analyze(this.layers);
     this.lyrics = info.lyrics ?? null;
 
@@ -173,27 +191,46 @@ export class Deck extends EventTarget {
 
   /** Posición actual en segundos de canción. */
   get position(): number {
-    if (!this.playing) return this.offset;
-    const elapsed = Math.max(0, this.ctx.currentTime - this.startedAt) * this.rate;
-    return Math.min(this.offset + elapsed, this.duration);
+    return this.positionAt(this.ctx.currentTime);
   }
 
-  async play(): Promise<void> {
+  /** Dónde estará (o estaba) la canción en un instante del reloj de audio. */
+  positionAt(time: number): number {
+    if (!this.playing) return this.offset;
+    let p = this.offset + Math.max(0, time - this.startedAt) * this.rate;
+    // Dentro de un loop, al llegar al final vuelve al principio del loop.
+    const loop = this.loop;
+    if (loop && p >= loop.end) p = loop.start + ((p - loop.start) % (loop.end - loop.start));
+    return Math.min(p, this.duration);
+  }
+
+  /**
+   * Pone en marcha la canción. `when` = instante exacto del reloj de audio
+   * en que debe empezar (si no se da, enseguida).
+   */
+  async play(when?: number): Promise<void> {
     if (!this.loaded || this.playing) return;
     // Los navegadores no dejan sonar audio hasta que el usuario hace clic;
     // "resume" desbloquea el sonido tras ese primer clic.
     await this.ctx.resume();
     if (this.offset >= this.duration) this.offset = 0;
+    const loop = this.loop;
+    if (loop && this.offset >= loop.end) this.offset = loop.start;
 
     // Todas las capas arrancan EXACTAMENTE en el mismo instante (un pelín en
     // el futuro, para que dé tiempo a programarlas todas). Así no se desfasan.
-    const when = this.ctx.currentTime + 0.03;
+    const start = when ?? this.ctx.currentTime + 0.03;
     const sources = this.layers.map((layer) => {
       const source = this.ctx.createBufferSource();
       source.buffer = layer.buffer;
       source.playbackRate.value = this.rate;
+      if (loop) {
+        source.loop = true;
+        source.loopStart = loop.start;
+        source.loopEnd = loop.end;
+      }
       source.connect(layer.gain);
-      source.start(when, this.offset);
+      source.start(start, this.offset);
       return source;
     });
     sources[0].onended = () => {
@@ -206,8 +243,187 @@ export class Deck extends EventTarget {
     };
 
     this.sources = sources;
-    this.startedAt = when;
+    this.startedAt = start;
     this.playing = true;
+  }
+
+  // --- Asistencia de golpe ----------------------------------------------------
+  //
+  // Para que dos canciones vayan "a la vez", sus golpes tienen que caer en el
+  // mismo instante. Usamos la rejilla de golpes de cada una (que sigue ahí
+  // aunque quites el bajo o la batería con los pads).
+
+  /** Longitud de un golpe en segundos de canción (si no hay BPM, como 120). */
+  get beatLength(): number {
+    return 60 / (this.bpm ?? 120);
+  }
+
+  /** En qué parte del golpe está la canción en `pos`: 0 = justo en el golpe, 0.5 = a mitad. */
+  private beatPhase(pos: number): number | null {
+    if (this.bpm === null || this.firstBeat === null) return null;
+    const beats = (pos - this.firstBeat) / this.beatLength;
+    return beats - Math.floor(beats);
+  }
+
+  /** El golpe más cercano a `t` (si no hay rejilla, el propio `t`). */
+  nearestBeat(t: number): number {
+    if (this.firstBeat === null) return t;
+    return this.firstBeat + Math.round((t - this.firstBeat) / this.beatLength) * this.beatLength;
+  }
+
+  /**
+   * Cuántos golpes va "por delante" `master` respecto a este plato en el
+   * instante `time` (entre -0,5 y 0,5). 0 = golpes perfectamente cuadrados.
+   */
+  private beatOffsetTo(master: Deck, time: number, myPos = this.positionAt(time)): number | null {
+    const mine = this.beatPhase(myPos);
+    const theirs = master.beatPhase(master.positionAt(time));
+    if (mine === null || theirs === null) return null;
+    const diff = theirs - mine;
+    return diff - Math.round(diff);
+  }
+
+  /**
+   * PLAY con asistencia: arranca de forma que nuestros golpes caigan a la vez
+   * que los de `master` (la canción que ya suena).
+   *  - Si pulsas un pelín TARDE: arranca ya, pero adelantando la canción lo
+   *    justo para que el golpe coincida.
+   *  - Si pulsas un pelín PRONTO: espera esa fracción de golpe y arranca justo
+   *    en el golpe de la otra.
+   */
+  async playAlignedTo(master: Deck): Promise<void> {
+    if (this.playing) return;
+    await this.ctx.resume();
+    const when = this.ctx.currentTime + 0.03;
+    const diff = master.isPlaying ? this.beatOffsetTo(master, when, this.offset) : null;
+    if (diff === null) return this.play();
+    if (diff >= 0) {
+      this.offset += diff * this.beatLength;
+      return this.play(when);
+    }
+    const masterBeatSeconds = master.beatLength / master.tempo;
+    return this.play(when - diff * masterBeatSeconds);
+  }
+
+  /**
+   * Con las dos sonando: corrige el desfase de golpes acelerando o frenando
+   * un poquito (como mucho un 4 %) durante un momento. Así no hay saltos.
+   */
+  alignPhaseTo(master: Deck): void {
+    if (!this.playing || !master.isPlaying) return;
+    const diff = this.beatOffsetTo(master, this.ctx.currentTime);
+    if (diff === null) return;
+    const shift = diff * this.beatLength; // segundos de canción que hay que ganar (o perder)
+    if (Math.abs(shift) < 0.003) return;
+    const base = this.nudge?.base ?? this.rate;
+    this.stopNudge();
+    const seconds = Math.max(0.5, Math.abs(shift) / (0.04 * base));
+    this.applyTempo(base + shift / seconds);
+    this.nudge = {
+      base,
+      timer: setTimeout(() => {
+        this.nudge = null;
+        this.applyTempo(base);
+      }, seconds * 1000),
+    };
+  }
+
+  /** Cancela el empujoncito. `restore`: volver al tempo que había antes. */
+  private stopNudge(restore = true): void {
+    if (!this.nudge) return;
+    clearTimeout(this.nudge.timer);
+    const base = this.nudge.base;
+    this.nudge = null;
+    if (restore) this.applyTempo(base);
+  }
+
+  // --- Loops ----------------------------------------------------------------
+  //
+  // La repetición la hace el propio motor de audio del navegador (loopStart /
+  // loopEnd de cada fuente), al instante exacto: sin clics ni huecos y con
+  // los 4 stems a la vez.
+
+  /**
+   * Loop automático de `beats` golpes desde donde estás.
+   * `snap` = true (L.AJUST): empieza en el golpe más cercano.
+   * `snap` = false (L.PERS): empieza EXACTAMENTE ahora, haya golpe o no.
+   */
+  autoLoop(beats: number, snap: boolean): void {
+    if (!this.loaded) return;
+    const pos = this.position;
+    const start = snap ? this.nearestBeat(pos) : pos;
+    this.setLoop(Math.max(0, start), start + beats * this.beatLength);
+  }
+
+  /** Cambia el tamaño del loop activo (mismo inicio). */
+  resizeLoop(beats: number): void {
+    if (this.loop) this.setLoop(this.loop.start, this.loop.start + beats * this.beatLength);
+  }
+
+  /** Botón IN: marca dónde empezará el loop. */
+  markLoopIn(snap: boolean): void {
+    if (!this.loaded) return;
+    const pos = this.position;
+    this.loopIn = snap ? this.nearestBeat(pos) : pos;
+    this.emit('loop');
+  }
+
+  /** Botón OUT: cierra el loop entre IN y aquí, y empieza a repetirse. */
+  markLoopOut(snap: boolean): void {
+    const start = this.loopIn ?? this.loop?.start;
+    if (start === undefined || start === null) return;
+    const pos = this.position;
+    let end: number;
+    if (snap) {
+      // Ajustado: un número entero de golpes (mínimo 1).
+      const beats = Math.max(1, Math.round((pos - start) / this.beatLength));
+      end = start + beats * this.beatLength;
+    } else {
+      if (pos - start < 0.05) return; // demasiado corto
+      end = pos;
+    }
+    this.loopIn = null;
+    this.setLoop(start, end);
+  }
+
+  /** Sale del loop: la canción sigue adelante desde donde esté. */
+  exitLoop(): void {
+    if (!this.loop) return;
+    this.rebase();
+    this.loop = null;
+    for (const s of this.sources) s.loop = false;
+    this.emit('loop');
+  }
+
+  private setLoop(start: number, end: number): void {
+    end = Math.min(end, this.duration);
+    if (end - start < 0.01) return;
+    this.rebase();
+    // Si ya hemos pasado el final del loop nuevo, volvemos a caer dentro.
+    if (this.playing && this.offset >= end) this.offset = start + ((this.offset - start) % (end - start));
+    this.loop = { start, end };
+    for (const s of this.sources) {
+      s.loopStart = start;
+      s.loopEnd = end;
+      s.loop = true;
+    }
+    this.emit('loop');
+  }
+
+  /** Si saltas fuera del loop (clic en la onda, CUE…), el loop se quita. */
+  private dropLoopIfOutside(pos: number): void {
+    if (this.loop && (pos < this.loop.start || pos >= this.loop.end)) {
+      this.loop = null;
+      this.emit('loop');
+    }
+  }
+
+  /** Apunta "dónde estamos" como nuevo punto de partida (antes de cambiar algo en marcha). */
+  private rebase(): void {
+    if (!this.playing) return;
+    const now = this.ctx.currentTime;
+    this.offset = this.positionAt(now);
+    this.startedAt = Math.max(now, this.startedAt);
   }
 
   pause(): void {
@@ -242,6 +458,7 @@ export class Deck extends EventTarget {
     if (this.playing && !this.previewing) {
       this.pause();
       this.offset = this.cuePoint;
+      this.dropLoopIfOutside(this.cuePoint);
       this.emit('transport');
       return;
     }
@@ -257,6 +474,7 @@ export class Deck extends EventTarget {
     this.previewing = false;
     this.pause();
     this.offset = this.cuePoint;
+    this.dropLoopIfOutside(this.cuePoint);
     this.emit('transport');
   }
 
@@ -272,6 +490,7 @@ export class Deck extends EventTarget {
     const wasPlaying = this.playing;
     this.pause();
     this.offset = Math.max(0, Math.min(seconds, this.duration));
+    this.dropLoopIfOutside(this.offset);
     if (wasPlaying) await this.play();
   }
 
@@ -294,6 +513,7 @@ export class Deck extends EventTarget {
    */
   setTempo(rate: number): void {
     this.stopGlide();
+    this.stopNudge(false);
     this.applyTempo(rate);
   }
 
@@ -303,6 +523,7 @@ export class Deck extends EventTarget {
    */
   glideTempo(rate: number, durationMs: number): void {
     this.stopGlide();
+    this.stopNudge();
     const from = this.rate;
     const start = performance.now();
     this.glideTimer = setInterval(() => {
@@ -330,8 +551,7 @@ export class Deck extends EventTarget {
     const now = this.ctx.currentTime;
     if (this.playing) {
       // Guardamos dónde estamos antes de cambiar, para no perder la cuenta.
-      this.offset = this.position;
-      this.startedAt = Math.max(now, this.startedAt);
+      this.rebase();
       for (const s of this.sources) s.playbackRate.setValueAtTime(rate, this.startedAt);
     }
     this.rate = rate;
