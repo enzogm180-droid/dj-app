@@ -13,9 +13,10 @@
  *                                  ↑ ahora
  *
  * Con la rueda del ratón encima se hace zoom (ver más o menos segundos).
+ * Haciendo clic y arrastrando a los lados, se mueve la canción.
  */
 import type { Deck } from '../audio/deck';
-import { columnsFor, drawStacked, layerColors } from './stem-draw';
+import { columnsFor, drawHotCues, drawStacked, layerColors } from './stem-draw';
 
 const MIN_SECONDS = 4;
 const MAX_SECONDS = 40;
@@ -51,7 +52,44 @@ export class ScrollingWave {
       },
       { passive: false },
     );
+
+    // Arrastrar la onda con el ratón para mover la canción, como si movieras
+    // el disco con la mano: hacia la izquierda avanza, hacia la derecha retrocede.
+    // Mientras arrastras la canción se para; al soltar, si sonaba, sigue sonando.
+    let drag: { x: number; position: number; wasPlaying: boolean } | null = null;
+    canvas.addEventListener('pointerdown', (e) => {
+      if (!deck.loaded || e.button !== 0) return;
+      drag = { x: e.clientX, position: deck.position, wasPlaying: deck.isPlaying };
+      deck.pause();
+      try {
+        canvas.setPointerCapture(e.pointerId); // seguimos aunque el ratón salga de la onda
+      } catch {
+        // Algunos dispositivos no lo permiten; no pasa nada.
+      }
+      canvas.classList.add('dragging');
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      // Píxeles de pantalla → segundos de canción, con el zoom actual.
+      const secondsPerPixel = this.seconds / canvas.getBoundingClientRect().width;
+      void deck.seek(drag.position - (e.clientX - drag.x) * secondsPerPixel);
+    });
+    const endDrag = () => {
+      if (!drag) return;
+      const { wasPlaying } = drag;
+      drag = null;
+      canvas.classList.remove('dragging');
+      if (wasPlaying) this.onResume?.();
+    };
+    canvas.addEventListener('pointerup', endDrag);
+    canvas.addEventListener('pointercancel', endDrag);
   }
+
+  /**
+   * Qué hacer al soltar la onda si la canción estaba sonando. Desde fuera le
+   * decimos "dale a PLAY" (así, con la asistencia, vuelve a entrar en su golpe).
+   */
+  onResume: (() => void) | null = null;
 
   draw(): void {
     const { width, height } = this.canvas;
@@ -134,10 +172,13 @@ export class ScrollingWave {
       g.fillRect(cueX - ratio / 2, waveTop, ratio, waveH);
     }
 
-    // 7. Letra: cada palabra en su momento. La que se canta ahora, resaltada.
+    // 7. Hot cues: banderitas de colores con su número.
+    drawHotCues(g, this.deck.hotCues, xAt, waveTop, waveTop + waveH, ratio);
+
+    // 8. Letra: cada palabra en su momento. La que se canta ahora, resaltada.
     this.drawLyrics(position, xAt, lyricsH, ratio, css);
 
-    // 8. Cabezal fijo en el centro.
+    // 9. Cabezal fijo en el centro.
     g.fillStyle = css.getPropertyValue('--playhead');
     g.fillRect(center - ratio, 0, 2 * ratio, height);
   }

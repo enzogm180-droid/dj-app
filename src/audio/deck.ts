@@ -44,10 +44,40 @@ export interface LyricWord {
 
 /** Datos extra de una canción que ya conocemos (los guarda el preparador). */
 export interface TrackInfo {
+  /** Identificador de la canción (para recordar sus hot cues). */
+  id?: string | null;
   bpm?: number | null;
   /** Segundo del primer golpe (rejilla de golpes). */
   beat?: number | null;
   lyrics?: LyricWord[] | null;
+}
+
+/** Cuántos hot cues tiene cada plato. */
+export const HOT_CUES = 4;
+
+/**
+ * Los hot cues se guardan en el almacenamiento del navegador, uno por
+ * canción. (En la fase 6 irán también a Supabase, para tenerlos en cualquier PC).
+ */
+function loadHotCues(id: string | null): (number | null)[] {
+  const empty = new Array(HOT_CUES).fill(null);
+  if (!id) return empty;
+  try {
+    const saved = JSON.parse(localStorage.getItem(`dj-app:hotcues:${id}`) ?? 'null');
+    return Array.isArray(saved) ? empty.map((_, i) => (typeof saved[i] === 'number' ? saved[i] : null)) : empty;
+  } catch {
+    return empty;
+  }
+}
+
+function saveHotCues(id: string | null, cues: (number | null)[]): void {
+  if (!id) return;
+  try {
+    if (cues.every((c) => c === null)) localStorage.removeItem(`dj-app:hotcues:${id}`);
+    else localStorage.setItem(`dj-app:hotcues:${id}`, JSON.stringify(cues));
+  } catch {
+    // Si el navegador no deja guardar (modo privado…), simplemente no se recuerdan.
+  }
 }
 
 /** Hay que llamarlo una vez al arrancar la app, antes de crear los platos. */
@@ -107,6 +137,11 @@ export class Deck extends EventTarget {
   /** Punto IN marcado, esperando a que pulses OUT. */
   loopIn: number | null = null;
 
+  /** Hot cues: 8 puntos de memoria (en segundos), o null si están vacíos. */
+  hotCues: (number | null)[] = new Array(HOT_CUES).fill(null);
+  /** Identificador de la canción cargada (para guardar sus hot cues). */
+  private trackId: string | null = null;
+
   /** `output` = a dónde mandamos el sonido (normalmente, un canal del mixer). */
   constructor(ctx: AudioContext, output: AudioNode) {
     super();
@@ -132,7 +167,7 @@ export class Deck extends EventTarget {
   }
 
   /** Avisa a quien escuche (la interfaz) de que algo ha cambiado. */
-  private emit(type: 'loaded' | 'ended' | 'stems' | 'tempo' | 'transport' | 'loop'): void {
+  private emit(type: 'loaded' | 'ended' | 'stems' | 'tempo' | 'transport' | 'loop' | 'hotcues'): void {
     this.dispatchEvent(new Event(type));
   }
 
@@ -152,6 +187,13 @@ export class Deck extends EventTarget {
     this.previewing = false;
     this.loop = null;
     this.loopIn = null;
+    // Canción nueva, tempo nuevo: vuelve a 0 % para que suene a SU BPM.
+    // (Si había un SYNC o un ajuste de golpe a medias, se cancela).
+    this.stopGlide();
+    this.stopNudge(false);
+    this.applyTempo(1);
+    this.trackId = info.id ?? null;
+    this.hotCues = loadHotCues(this.trackId);
 
     // Rejilla de golpes (BPM + primer golpe): si nos la da la biblioteca, la
     // usamos; si no, la calculamos. Con stems, solo con la batería: es más fiable.
@@ -335,6 +377,69 @@ export class Deck extends EventTarget {
     const base = this.nudge.base;
     this.nudge = null;
     if (restore) this.applyTempo(base);
+  }
+
+  // --- Hot cues -------------------------------------------------------------
+  //
+  //  - Botón vacío: guarda el punto donde estás (ajustado al golpe si `snap`).
+  //  - Botón lleno: salta a ese punto. Si está sonando, sigue sonando SIN
+  //    perder el ritmo: cae en el mismo momento del golpe en que ibas.
+
+  /** Pulsar un hot cue. */
+  hotCue(index: number, snap: boolean): void {
+    if (!this.loaded) return;
+    const saved = this.hotCues[index];
+    if (saved === null) {
+      const pos = this.position;
+      this.hotCues[index] = Math.max(0, snap ? this.nearestBeat(pos) : pos);
+      saveHotCues(this.trackId, this.hotCues);
+      this.emit('hotcues');
+      return;
+    }
+    if (!this.playing) {
+      // Parado: vamos al punto y lo dejamos como punto CUE.
+      this.offset = saved;
+      this.cuePoint = saved;
+      this.dropLoopIfOutside(saved);
+      this.emit('transport');
+      return;
+    }
+    // Sonando: el salto ocurre en un instante concreto (`when`). Calculamos
+    // dónde estaremos en ese instante y mantenemos la misma parte del golpe.
+    const when = this.ctx.currentTime + 0.03;
+    let target = saved;
+    const here = this.beatPhase(this.positionAt(when));
+    const there = this.beatPhase(saved);
+    if (here !== null && there !== null) {
+      target = saved + (((here - there) % 1) + 1) % 1 * this.beatLength;
+      if (target - saved > this.beatLength * 0.999) target -= this.beatLength; // por redondeos
+    }
+    this.jumpAt(target, when);
+  }
+
+  /** Borra un hot cue. */
+  deleteHotCue(index: number): void {
+    this.hotCues[index] = null;
+    saveHotCues(this.trackId, this.hotCues);
+    this.emit('hotcues');
+  }
+
+  /**
+   * Salta a `target` en el instante `when` SIN hueco de silencio: las fuentes
+   * nuevas empiezan justo cuando paran las viejas.
+   */
+  private jumpAt(target: number, when: number): void {
+    const old = this.sources;
+    this.sources = [];
+    for (const s of old) {
+      s.onended = null;
+      s.stop(when);
+    }
+    setTimeout(() => old.forEach((s) => s.disconnect()), 500);
+    this.playing = false;
+    this.offset = target;
+    this.dropLoopIfOutside(target);
+    void this.play(when);
   }
 
   // --- Loops ----------------------------------------------------------------

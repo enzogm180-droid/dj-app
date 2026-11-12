@@ -717,3 +717,176 @@ button:disabled {
   border-color: var(--loop);
   color: var(--bg);
 }
+
+/* --- Ruedas (knobs) ---------------------------------------------------------------- */
+.knob {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-size: 11px;
+  color: var(--muted);
+  user-select: none;
+}
+
+.knob-dial {
+  border-radius: 50%;
+  cursor: ns-resize; /* el cursor indica que se arrastra arriba/abajo */
+  touch-action: none;
+  outline: none;
+}
+
+.knob-dial:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.knob-body {
+  fill: #2c3138;
+  stroke: #0d0f12;
+  stroke-width: 1.5;
+}
+
+.knob-dial:hover .knob-body,
+.knob-dial.dragging .knob-body {
+  fill: #353b44;
+}
+
+.knob-track {
+  fill: none;
+  stroke: #3a4048;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.knob-value {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.knob-pointer {
+  stroke: var(--text);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.knob-output {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  min-height: 1.2em;
+}
+
+/* Banda o stem quitado del todo: en rojo. */
+.knob.killed .knob-value,
+.knob.killed .knob-pointer {
+  stroke: #e5484d;
+}
+
+.knob.killed .knob-output {
+  color: #e5484d;
+  font-weight: 700;
+}
+
+/* Módulo de GAIN, encima del interruptor EQ / STEMS. */
+.gain-module {
+  display: flex;
+  justify-content: center;
+  padding: 6px 0 4px;
+  border: 1px solid #353a42;
+  border-radius: 8px;
+  background: #181b20;
+}
+
+.gain-module .knob-value {
+  stroke: var(--cue);
+}
+
+.mixer .knobs {
+  align-items: center;
+  gap: 4px;
+}
+
+.mixer .filter-knob {
+  display: flex;
+  justify-content: center;
+}
+
+/* --- Páginas de pads (STEMS / HOT CUES) ------------------------------------------ */
+.pad-pages {
+  margin-top: 14px;
+}
+
+.pad-tabs {
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: 8px;
+}
+
+.pad-tabs button {
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 0;
+}
+
+.pad-tabs button:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.pad-tabs button:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.pad-tabs button[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+.pad-pages .pads {
+  margin-top: 0;
+}
+
+.pads[hidden] {
+  display: none;
+}
+
+/* Hot cues: fila de arriba = el punto, de su color. */
+.pad.hotcue {
+  color: var(--hc);
+  border-color: color-mix(in srgb, var(--hc) 45%, #353a42);
+  background: var(--panel-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hot cue guardado: se rellena de su color y enseña el tiempo. */
+.pad.hotcue.set {
+  background: var(--hc);
+  border-color: var(--hc);
+  color: var(--bg);
+}
+
+/* Fila de abajo: borrar el de encima. */
+.pad.hotcue-delete {
+  background: transparent;
+  border-color: #353a42;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.pad.hotcue-delete:not(:disabled):hover {
+  border-color: #e5484d;
+  color: #e5484d;
+}
+
+/* La onda grande se puede arrastrar con el ratón: cursor de "mano". */
+.lane canvas {
+  cursor: grab;
+  touch-action: none;
+}
+
+.lane canvas.dragging {
+  cursor: grabbing;
+}

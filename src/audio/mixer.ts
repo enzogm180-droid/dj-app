@@ -3,9 +3,13 @@
  *
  * Cada plato entra en su propio CANAL, y los canales se juntan en el MASTER:
  *
- *   Plato A → [Bajos → Medios → Agudos] → Filtro → Volumen A → Crossfader A ┐
- *                                                                            ├→ Master → altavoces
- *   Plato B → [Bajos → Medios → Agudos] → Filtro → Volumen B → Crossfader B ┘
+ *   Plato A → Gain → [Bajos → Medios → Agudos] → Filtro → Volumen A → Crossfader A ┐
+ *                                                                                   ├→ Master
+ *   Plato B → Gain → [Bajos → Medios → Agudos] → Filtro → Volumen B → Crossfader B ┘
+ *
+ * GAIN (ganancia): iguala el volumen de canciones grabadas más fuertes o más
+ * flojas, ANTES de todo lo demás. Así el fader de volumen de las dos queda
+ * en el mismo sitio y el ecualizador trabaja con un nivel parecido.
  *
  * Todo son nodos de la Web Audio API conectados en cadena, como cables.
  */
@@ -17,8 +21,12 @@ export type Band = 'low' | 'mid' | 'high';
 export const EQ_MIN_DB = -24; // casi silencio: útil para "quitar los bajos"
 export const EQ_MAX_DB = 6;
 
+/** Rango de la ganancia (GAIN), en decibelios. */
+export const GAIN_MIN_DB = -12;
+export const GAIN_MAX_DB = 12;
+
 export class Channel {
-  /** Aquí conectamos el plato. */
+  /** Aquí conectamos el plato. Es también el control de GAIN. */
   readonly input: GainNode;
   private readonly eq: Record<Band, BiquadFilterNode>;
   /** Filtro DJ: un paso bajo (quita agudos) y un paso alto (quita graves). */
@@ -74,6 +82,15 @@ export class Channel {
       .connect(this.fader)
       .connect(this.xfade)
       .connect(output);
+  }
+
+  /**
+   * Ganancia en dB (de -12 a +12; 0 = sin cambios).
+   * Los decibelios no son lineales: +6 dB es casi el doble de amplitud,
+   * -6 dB casi la mitad. De ahí la fórmula 10^(dB/20).
+   */
+  setGain(db: number): void {
+    this.input.gain.setTargetAtTime(Math.pow(10, db / 20), this.ctx.currentTime, 0.01);
   }
 
   /**
