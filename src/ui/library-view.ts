@@ -3,6 +3,7 @@
  * canciones y mandarlas al plato A o B.
  */
 import { Library, lastFolder, pickFolder, reconnect, supportsFolders, type Track } from '../library/library';
+import { useLibrary } from '../library/hotcue-store';
 import { formatTime } from './deck-view';
 
 export interface LibraryView {
@@ -52,10 +53,17 @@ export function createLibraryView(
     info.textContent = `Leyendo ${handle.name}…`;
     const library = await Library.open(handle);
     view.library = library;
+    useLibrary(library); // los hot cues se guardan en esta carpeta (si hay permiso)
     reconnectBtn.hidden = true;
     search.disabled = false;
     const prepared = library.tracks.filter((t) => t.stems).length;
-    info.textContent = `${library.name}: ${library.tracks.length} canciones · ${prepared} con stems`;
+    const where = library.writable
+      ? 'tus hot cues se guardan en la carpeta'
+      : 'solo lectura: tus hot cues se guardan en este PC';
+    info.textContent = `${library.name}: ${library.tracks.length} canciones · ${prepared} con stems · ${where}`;
+    library.onSaveError = () => {
+      info.textContent = `⚠ No se pudo guardar en "${library.name}". ¿Has quitado el pincho? Vuelve a abrir la carpeta.`;
+    };
     renderRows();
   }
 
