@@ -1,9 +1,14 @@
 /**
  * Biblioteca: tu carpeta de música (en el PC o en un pincho USB).
  *
- * La app pide permiso para LEER esa carpeta (nunca escribe en ella), busca
- * todas las canciones y mira el registro que deja el preparador en
- * "_stems/biblioteca.json" para saber cuáles ya están separadas.
+ * La app busca todas las canciones y mira el registro que deja el preparador
+ * en "_stems/biblioteca.json" para saber cuáles ya están separadas.
+ *
+ * Lo que TÚ creas mientras pinchas (hot cues; más adelante, playlists) se
+ * guarda en "_stems/mis-datos.json", DENTRO de la carpeta. Así viaja con el
+ * pincho a cualquier portátil, y con su copia. Por eso la app pide permiso
+ * para EDITAR la carpeta. Solo escribe ese archivo: nunca toca tu música ni
+ * lo que genera el preparador.
  *
  * La carpeta elegida se recuerda (en el almacenamiento interno del navegador),
  * así no tienes que buscarla cada vez: solo confirmar el permiso con un clic.
@@ -13,6 +18,14 @@ import type { LyricWord, StemName } from '../audio/deck';
 const AUDIO_EXTENSIONS = ['.mp3', '.wav', '.flac', '.m4a', '.aac', '.aiff', '.aif', '.ogg', '.opus'];
 const STEMS_DIRNAME = '_stems';
 const LIBRARY_FILENAME = 'biblioteca.json';
+const USER_DATA_FILENAME = 'mis-datos.json';
+
+/** Lo que guardamos en "_stems/mis-datos.json". */
+interface UserData {
+  version: 1;
+  /** Hot cues de cada canción (por su identificador), en segundos. */
+  hotCues: Record<string, (number | null)[]>;
+}
 
 /** Lo que el preparador guarda de cada canción (ver tools/preparador/preparar.py). */
 interface PreparedEntry {
@@ -47,19 +60,69 @@ export interface Track {
 export class Library {
   readonly root: FileSystemDirectoryHandle;
   readonly tracks: Track[];
+  /** ¿Tenemos permiso para guardar en la carpeta? (si no, se guarda en el navegador) */
+  writable: boolean;
+  private readonly data: UserData;
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
-  private constructor(root: FileSystemDirectoryHandle, tracks: Track[]) {
+  /** Se llama si falla un guardado (para avisarte en pantalla). */
+  onSaveError: ((err: unknown) => void) | null = null;
+
+  private constructor(root: FileSystemDirectoryHandle, tracks: Track[], data: UserData, writable: boolean) {
     this.root = root;
     this.tracks = tracks;
+    this.data = data;
+    this.writable = writable;
   }
 
   get name(): string {
     return this.root.name;
   }
 
+  // --- Tus datos (mis-datos.json) ----------------------------------------------
+
+  /** Hot cues guardados de una canción, o null si no hay. */
+  getHotCues(id: string): (number | null)[] | null {
+    return this.data.hotCues[id] ?? null;
+  }
+
+  /** Guarda los hot cues de una canción (se escriben en la carpeta enseguida). */
+  setHotCues(id: string, cues: (number | null)[]): void {
+    if (cues.every((c) => c === null)) delete this.data.hotCues[id];
+    else this.data.hotCues[id] = [...cues];
+    this.scheduleSave();
+  }
+
+  /**
+   * Escribimos el archivo un instante después del último cambio: si cambias
+   * varias cosas seguidas, se escribe una sola vez.
+   */
+  private scheduleSave(): void {
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => void this.save(), 300);
+  }
+
+  private async save(): Promise<void> {
+    this.saveTimer = null;
+    try {
+      const dir = await this.root.getDirectoryHandle(STEMS_DIRNAME, { create: true });
+      const file = await dir.getFileHandle(USER_DATA_FILENAME, { create: true });
+      // El navegador escribe en un archivo aparte y lo cambia de golpe al
+      // cerrar: si se desconecta el pincho a medias, el archivo viejo sigue bien.
+      const writer = await file.createWritable();
+      await writer.write(JSON.stringify(this.data, null, 1));
+      await writer.close();
+    } catch (err) {
+      console.error('No se pudo guardar en la carpeta', err);
+      this.onSaveError?.(err);
+    }
+  }
+
   /** Recorre la carpeta y monta la lista de canciones. */
   static async open(root: FileSystemDirectoryHandle): Promise<Library> {
     const prepared = await readPrepared(root);
+    const data = await readUserData(root);
+    const writable = (await root.queryPermission({ mode: 'readwrite' })) === 'granted';
     const byPath = new Map(Object.values(prepared).map((e) => [e.file, e]));
 
     const tracks: Track[] = [];
@@ -77,7 +140,7 @@ export class Library {
       });
     }
     tracks.sort((a, b) => a.title.localeCompare(b.title, 'es'));
-    return new Library(root, tracks);
+    return new Library(root, tracks, data, writable);
   }
 
   /** Lee el archivo original de una canción. */
@@ -121,9 +184,18 @@ export class Library {
 
 // --- Elegir y recordar la carpeta ----------------------------------------------
 
-/** Abre el selector de carpetas de Windows. */
+/**
+ * Abre el selector de carpetas de Windows, pidiendo permiso para EDITAR (para
+ * guardar tus hot cues en ella). Si no lo das, la abrimos solo para leer.
+ */
 export async function pickFolder(): Promise<FileSystemDirectoryHandle> {
-  const handle = await window.showDirectoryPicker({ id: 'musica', mode: 'read' });
+  let handle: FileSystemDirectoryHandle;
+  try {
+    handle = await window.showDirectoryPicker({ id: 'musica', mode: 'readwrite' });
+  } catch (err) {
+    if ((err as DOMException).name !== 'NotAllowedError') throw err; // p. ej. cancelaste: no insistimos
+    handle = await window.showDirectoryPicker({ id: 'musica', mode: 'read' });
+  }
   await saveHandle(handle);
   return handle;
 }
@@ -132,12 +204,16 @@ export async function pickFolder(): Promise<FileSystemDirectoryHandle> {
 export async function lastFolder(): Promise<{ handle: FileSystemDirectoryHandle; granted: boolean } | null> {
   const handle = await loadHandle();
   if (!handle) return null;
-  const granted = (await handle.queryPermission({ mode: 'read' })) === 'granted';
+  const granted = (await handle.queryPermission({ mode: 'readwrite' })) === 'granted';
   return { handle, granted };
 }
 
-/** Pide permiso para la carpeta recordada (necesita un clic del usuario). */
+/**
+ * Pide permiso para la carpeta recordada (necesita un clic del usuario).
+ * Primero para editarla; si no, al menos para leerla.
+ */
 export async function reconnect(handle: FileSystemDirectoryHandle): Promise<boolean> {
+  if ((await handle.requestPermission({ mode: 'readwrite' })) === 'granted') return true;
   return (await handle.requestPermission({ mode: 'read' })) === 'granted';
 }
 
@@ -153,6 +229,16 @@ async function readPrepared(root: FileSystemDirectoryHandle): Promise<Record<str
     return JSON.parse(await file.text()).tracks ?? {};
   } catch {
     return {}; // carpeta sin preparar todavía: no pasa nada
+  }
+}
+
+async function readUserData(root: FileSystemDirectoryHandle): Promise<UserData> {
+  try {
+    const file = await getFile(root, `${STEMS_DIRNAME}/${USER_DATA_FILENAME}`);
+    const parsed = JSON.parse(await file.text());
+    return { version: 1, hotCues: parsed.hotCues ?? {} };
+  } catch {
+    return { version: 1, hotCues: {} }; // aún no has guardado nada: empezamos de cero
   }
 }
 

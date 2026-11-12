@@ -21,6 +21,7 @@
  */
 import { analyze, type TrackVisual } from './analysis';
 import { detectBeats } from './bpm';
+import { loadHotCues, saveHotCues } from '../library/hotcue-store';
 import keylockUrl from './keylock-processor.ts?worker&url';
 
 /** Las 4 partes que genera el preparador. */
@@ -55,30 +56,6 @@ export interface TrackInfo {
 /** Cuántos hot cues tiene cada plato. */
 export const HOT_CUES = 4;
 
-/**
- * Los hot cues se guardan en el almacenamiento del navegador, uno por
- * canción. (En la fase 6 irán también a Supabase, para tenerlos en cualquier PC).
- */
-function loadHotCues(id: string | null): (number | null)[] {
-  const empty = new Array(HOT_CUES).fill(null);
-  if (!id) return empty;
-  try {
-    const saved = JSON.parse(localStorage.getItem(`dj-app:hotcues:${id}`) ?? 'null');
-    return Array.isArray(saved) ? empty.map((_, i) => (typeof saved[i] === 'number' ? saved[i] : null)) : empty;
-  } catch {
-    return empty;
-  }
-}
-
-function saveHotCues(id: string | null, cues: (number | null)[]): void {
-  if (!id) return;
-  try {
-    if (cues.every((c) => c === null)) localStorage.removeItem(`dj-app:hotcues:${id}`);
-    else localStorage.setItem(`dj-app:hotcues:${id}`, JSON.stringify(cues));
-  } catch {
-    // Si el navegador no deja guardar (modo privado…), simplemente no se recuerdan.
-  }
-}
 
 /** Hay que llamarlo una vez al arrancar la app, antes de crear los platos. */
 export async function setupDecks(ctx: AudioContext): Promise<void> {
@@ -193,7 +170,7 @@ export class Deck extends EventTarget {
     this.stopNudge(false);
     this.applyTempo(1);
     this.trackId = info.id ?? null;
-    this.hotCues = loadHotCues(this.trackId);
+    this.hotCues = loadHotCues(this.trackId, HOT_CUES);
 
     // Rejilla de golpes (BPM + primer golpe): si nos la da la biblioteca, la
     // usamos; si no, la calculamos. Con stems, solo con la batería: es más fiable.
