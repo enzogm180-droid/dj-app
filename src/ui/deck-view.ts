@@ -7,6 +7,7 @@
  */
 import type { Deck, StemName } from '../audio/deck';
 import type { Library } from '../library/library';
+import { HOT_CUE_COLORS } from './stem-draw';
 import { Waveform } from './waveform';
 
 /**
@@ -123,10 +124,30 @@ export function createDeckView(
       </div>
     </div>
 
-    <div class="pads" role="group" aria-label="Stems del plato ${letter}">
-      ${PADS.map(({ stem, label }) => `<button class="pad" data-stem="${stem}" disabled aria-pressed="false">${label}</button>`).join('')}
-      <button class="pad mode-pad" data-el="acapella" disabled aria-pressed="false">Acapella</button>
-      <button class="pad mode-pad" data-el="instrumental" disabled aria-pressed="false">Instrumental</button>
+    <div class="pad-pages">
+      <div class="pad-tabs" role="group" aria-label="Qué hacen los pads del plato ${letter}">
+        <button data-pad-page="stems" aria-pressed="true">STEMS</button>
+        <button data-pad-page="hotcues" aria-pressed="false">HOT CUES</button>
+      </div>
+
+      <div class="pads" data-page="stems" role="group" aria-label="Stems del plato ${letter}">
+        ${PADS.map(({ stem, label }) => `<button class="pad" data-stem="${stem}" disabled aria-pressed="false">${label}</button>`).join('')}
+        <button class="pad mode-pad" data-el="acapella" disabled aria-pressed="false">Acapella</button>
+        <button class="pad mode-pad" data-el="instrumental" disabled aria-pressed="false">Instrumental</button>
+      </div>
+
+      <div class="pads" data-page="hotcues" role="group" aria-label="Hot cues del plato ${letter}" hidden>
+        ${HOT_CUE_COLORS.map(
+          (color, i) =>
+            `<button class="pad hotcue" data-hotcue="${i}" style="--hc: ${color}" disabled
+              title="Vacío: guarda aquí el punto · Lleno: salta a él">${i + 1}</button>`,
+        ).join('')}
+        ${HOT_CUE_COLORS.map(
+          (color, i) =>
+            `<button class="pad hotcue-delete" data-hotcue-delete="${i}" style="--hc: ${color}" disabled
+              aria-label="Borrar hot cue ${i + 1}" title="Borra el hot cue ${i + 1}">✕ ${i + 1}</button>`,
+        ).join('')}
+      </div>
     </div>
 
     <div class="loops">
@@ -331,6 +352,42 @@ export function createDeckView(
   loopDoubleBtn.addEventListener('click', () => changeSize(1));
   deck.addEventListener('loop', updateLoop);
 
+  // --- Páginas de pads: STEMS o HOT CUES ---------------------------------------
+  function showPadPage(page: 'stems' | 'hotcues'): void {
+    for (const tab of root.querySelectorAll<HTMLButtonElement>('[data-pad-page]')) {
+      tab.setAttribute('aria-pressed', String(tab.dataset.padPage === page));
+    }
+    for (const grid of root.querySelectorAll<HTMLElement>('[data-page]')) {
+      grid.hidden = grid.dataset.page !== page;
+    }
+  }
+  for (const tab of root.querySelectorAll<HTMLButtonElement>('[data-pad-page]')) {
+    tab.addEventListener('click', () => showPadPage(tab.dataset.padPage as 'stems' | 'hotcues'));
+  }
+
+  // --- Hot cues ------------------------------------------------------------------
+  //  Fila de arriba:  vacío → guarda el punto (ajustado al golpe con L.AJUST);
+  //                   lleno → salta a ese punto sin perder el ritmo.
+  //  Fila de abajo:   ✕ borra el hot cue que tiene encima.
+  const hotCueBtns = [...root.querySelectorAll<HTMLButtonElement>('[data-hotcue]')];
+  const deleteBtns = [...root.querySelectorAll<HTMLButtonElement>('[data-hotcue-delete]')];
+
+  function updateHotCues(): void {
+    hotCueBtns.forEach((btn, i) => {
+      const t = deck.hotCues[i];
+      btn.disabled = !deck.loaded;
+      btn.classList.toggle('set', t !== null);
+      btn.textContent = t === null ? String(i + 1) : `${i + 1} · ${formatTime(t).replace(/\.\d$/, '')}`;
+      btn.setAttribute('aria-label', t === null ? `Hot cue ${i + 1} vacío` : `Hot cue ${i + 1} en ${formatTime(t)}`);
+      deleteBtns[i].disabled = t === null; // solo se puede borrar si hay algo
+    });
+  }
+
+  hotCueBtns.forEach((btn, i) => btn.addEventListener('click', () => deck.hotCue(i, snap)));
+  deleteBtns.forEach((btn, i) => btn.addEventListener('click', () => deck.deleteHotCue(i)));
+  deck.addEventListener('hotcues', updateHotCues);
+  deck.addEventListener('loaded', updateHotCues);
+
   async function load(request: LoadRequest): Promise<void> {
     titleEl.textContent = `Cargando ${request.title}…`;
     artistEl.textContent = '';
@@ -365,12 +422,13 @@ export function createDeckView(
         const track = library && (await library.findByContent(data));
         if (library && track) {
           await d.loadStems(await library.readStems(track), {
+            id: track.stems!.folder,
             bpm: track.bpm,
             beat: track.beat,
             lyrics: await library.readLyrics(track),
           });
         } else {
-          await d.load(data);
+          await d.load(data, { id: `archivo:${file.name}:${file.size}` });
         }
       },
     });
@@ -430,7 +488,7 @@ export function createDeckView(
       timeEl.textContent = formatTime(position);
       remainingEl.textContent = `-${formatTime(Math.max(0, deck.duration - position))}`;
       const d = deck.duration;
-      waveform.draw(d ? position / d : 0, d ? deck.cuePoint / d : null, deck.loop);
+      waveform.draw(d ? position / d : 0, d ? deck.cuePoint / d : null, deck.loop, deck.hotCues);
       cueBtn.classList.toggle('on', deck.isPlaying && Math.abs(deck.position - deck.cuePoint) < 0.05);
     },
   };

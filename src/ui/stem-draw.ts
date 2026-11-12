@@ -17,6 +17,39 @@
 import type { LayerName, TrackVisual } from '../audio/analysis';
 import { PEAKS_PER_SECOND } from '../audio/analysis';
 
+/** Color de cada hot cue (1 a 4), igual en los botones y en las ondas. */
+export const HOT_CUE_COLORS = ['#e5484d', '#f5a524', '#4ade80', '#3b82f6'];
+
+/**
+ * Dibuja los hot cues: una línea de su color con una banderita y su número.
+ * `xAt(t)` dice en qué x cae el segundo t; `top` y `bottom` limitan la línea.
+ */
+export function drawHotCues(
+  g: CanvasRenderingContext2D,
+  cues: (number | null)[],
+  xAt: (t: number) => number,
+  top: number,
+  bottom: number,
+  ratio: number,
+): void {
+  const width = g.canvas.width;
+  g.font = `700 ${9 * ratio}px system-ui, sans-serif`;
+  g.textBaseline = 'middle';
+  g.textAlign = 'center';
+  cues.forEach((t, i) => {
+    if (t === null) return;
+    const x = Math.round(xAt(t));
+    if (x < -12 * ratio || x > width) return;
+    g.fillStyle = HOT_CUE_COLORS[i];
+    g.fillRect(x - ratio / 2, top, ratio, bottom - top);
+    const size = 11 * ratio;
+    g.fillRect(x, top, size, size);
+    g.fillStyle = '#0d0f12';
+    g.fillText(String(i + 1), x + size / 2, top + size / 2 + ratio / 2);
+  });
+  g.textAlign = 'start';
+}
+
 /** Orden de las capas, del centro hacia fuera. */
 export const LAYER_ORDER: LayerName[] = ['bass', 'drums', 'other', 'vocals'];
 

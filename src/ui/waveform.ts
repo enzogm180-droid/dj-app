@@ -9,7 +9,7 @@
  * Al hacer clic en ella, la canción salta a ese punto.
  */
 import type { TrackVisual } from '../audio/analysis';
-import { columnsFor, drawStacked, layerColors } from './stem-draw';
+import { columnsFor, drawHotCues, drawStacked, layerColors } from './stem-draw';
 
 export class Waveform {
   private readonly canvas: HTMLCanvasElement;
@@ -46,7 +46,12 @@ export class Waveform {
    * Redibuja. `fraction` = cuánto se ha reproducido (0 a 1).
    * `cue` = dónde está el punto CUE (0 a 1), o null si no hay que dibujarlo.
    */
-  draw(fraction: number, cue: number | null = null, loop: { start: number; end: number } | null = null): void {
+  draw(
+    fraction: number,
+    cue: number | null = null,
+    loop: { start: number; end: number } | null = null,
+    hotCues: (number | null)[] = [],
+  ): void {
     const { width, height } = this.canvas;
     const g = this.g;
     g.clearRect(0, 0, width, height);
@@ -93,6 +98,9 @@ export class Waveform {
       g.lineTo(cueX, 8 * ratio);
       g.fill();
     }
+
+    // Hot cues: banderitas de colores con su número.
+    drawHotCues(g, hotCues, (t) => (t / visual.duration) * width, 0, waveHeight, ratio);
 
     // Cabezal: la línea que marca por dónde va la canción.
     g.fillStyle = css.getPropertyValue('--playhead');

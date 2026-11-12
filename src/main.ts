@@ -37,7 +37,7 @@ app.innerHTML = `
       <span><i style="background: var(--bass-mark)"></i>Booms (golpes graves)</span>
       <span><i style="background: var(--loop)"></i>Loop</span>
       <span><i style="background: rgba(255,255,255,0.35)"></i>Golpes</span>
-      <span class="legend-hint">Rueda del ratón sobre la onda = zoom</span>
+      <span class="legend-hint">Arrastrar la onda = mover la canción · Rueda del ratón = zoom</span>
     </div>
   </section>
   <div class="console">
@@ -63,12 +63,17 @@ const libraryView = createLibraryView(document.getElementById('library')!, (trac
     load: async (deck) => {
       if (track.stems) {
         await deck.loadStems(await library.readStems(track), {
+          id: track.stems.folder, // la huella del archivo: no cambia aunque lo renombres
           bpm: track.bpm,
           beat: track.beat,
           lyrics: await library.readLyrics(track),
         });
       } else {
-        await deck.load(await library.readTrack(track), { bpm: track.bpm, beat: track.beat });
+        await deck.load(await library.readTrack(track), {
+          id: `ruta:${track.path}`,
+          bpm: track.bpm,
+          beat: track.beat,
+        });
       }
       // Si la canción no tenía BPM guardado, apuntamos el que acaba de calcular el plato.
       if (track.bpm === null && deck.bpm !== null) {
@@ -99,6 +104,9 @@ assistBtn.addEventListener('click', () => {
 // Ondas grandes que avanzan con la canción (arriba del todo).
 const laneA = new ScrollingWave(document.getElementById('lane-a') as HTMLCanvasElement, deckA);
 const laneB = new ScrollingWave(document.getElementById('lane-b') as HTMLCanvasElement, deckB);
+// Al soltar la onda tras arrastrarla, si sonaba, PLAY otra vez (con asistencia de golpe).
+laneA.onResume = () => void viewA.toggle();
+laneB.onResume = () => void viewB.toggle();
 
 // --- Teclado ------------------------------------------------------------------
 //   Plato A: Q = play/pausa, W = CUE (mantener)

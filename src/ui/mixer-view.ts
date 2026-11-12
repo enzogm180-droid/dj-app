@@ -1,19 +1,33 @@
 /**
- * La parte VISUAL del mixer: ruedas de cada canal, volumen, crossfader y master.
+ * La parte VISUAL del mixer, con ruedas como una mesa de verdad.
  *
- * Cada canal tiene un interruptor EQ / STEMS:
- *  - EQ:    las 3 ruedas son Agudos, Medios y Bajos (cortan frecuencias).
- *  - STEMS: las 3 ruedas son Voces, Instru y Beat (suben o quitan partes de la
- *           canción). Solo se puede usar si la canción está preparada.
- *           Van sincronizadas con los pads del plato: si quitas la voz con
- *           el pad, la rueda Voces baja a 0 %; si subes la rueda, vuelve.
+ * Cada canal, de arriba abajo:
+ *  - GAIN: ganancia de -12 a +12 dB (centro = 0 dB). Para igualar canciones
+ *    grabadas más fuertes o más flojas.
+ *  - Interruptor EQ / STEMS, y sus 3 ruedas:
+ *     · EQ:    Agudos, Medios y Bajos (cortan frecuencias).
+ *     · STEMS: Voces, Instru y Beat (suben o quitan partes de la canción).
+ *       Solo con canciones preparadas. Van sincronizadas con los pads del
+ *       plato: si quitas la voz con el pad, la rueda Voces baja a 0 %.
+ *  - FILTRO (izquierda = paso bajo, derecha = paso alto).
+ *  - Fader de volumen.
  *
- * Debajo, la rueda de FILTRO (izquierda = paso bajo, derecha = paso alto).
+ * Abajo, el master y el crossfader.
  *
  * Truco: en todos los controles, DOBLE CLIC = volver al valor por defecto.
+ * Las ruedas se giran arrastrando arriba/abajo o con la rueda del ratón.
  */
 import type { Deck, StemGroup } from '../audio/deck';
-import { EQ_MAX_DB, EQ_MIN_DB, type Band, type Channel, type Mixer } from '../audio/mixer';
+import {
+  EQ_MAX_DB,
+  EQ_MIN_DB,
+  GAIN_MAX_DB,
+  GAIN_MIN_DB,
+  type Band,
+  type Channel,
+  type Mixer,
+} from '../audio/mixer';
+import { createKnob, type Knob } from './knob';
 
 const BANDS: { band: Band; label: string }[] = [
   { band: 'high', label: 'Agudos' },
@@ -29,8 +43,14 @@ const GROUPS: { group: StemGroup; label: string }[] = [
 
 type Mode = 'eq' | 'stems';
 
+/** Lo más que se puede subir un stem con su rueda (1,5 = 150 %, unos +3,5 dB). */
+const STEM_MAX = 1.5;
+
+/** "+3 dB", "-6 dB", "0 dB". */
+const formatDb = (db: number) => `${db > 0 ? '+' : ''}${Number.isInteger(db) ? db : db.toFixed(1)} dB`;
+
 /**
- * Conecta un deslizador a una función: cada vez que se mueve, llama a
+ * Conecta un deslizador (fader) a una función: cada vez que se mueve, llama a
  * `apply` con su valor. Con doble clic vuelve a `defaultValue`.
  */
 function bindSlider(input: HTMLInputElement, defaultValue: number, apply: (value: number) => void): void {
@@ -43,33 +63,19 @@ function bindSlider(input: HTMLInputElement, defaultValue: number, apply: (value
   update(); // aplica el valor inicial
 }
 
-function knob(kind: string, key: string, label: string, letter: string, min: number, max: number, step: number, value: number): string {
-  return `
-    <label class="eq">
-      <span>${label} <output data-${kind}-value="${key}"></output></span>
-      <input type="range" data-${kind}="${key}" min="${min}" max="${max}" step="${step}" value="${value}"
-        aria-label="${label} del canal ${letter}" />
-    </label>`;
-}
-
 function channelStrip(letter: string, channel: Channel, deck: Deck): HTMLElement {
   const strip = document.createElement('div');
   strip.className = 'strip';
   strip.innerHTML = `
     <span class="strip-letter">${letter}</span>
+    <div class="gain-module" data-el="gain"></div>
     <div class="mode" role="group" aria-label="Modo de las ruedas del canal ${letter}">
       <button data-mode="eq" aria-pressed="true">EQ</button>
       <button data-mode="stems" aria-pressed="false" disabled title="Carga una canción preparada">STEMS</button>
     </div>
-    <div class="knobs" data-knobs="eq">
-      ${BANDS.map(({ band, label }) => knob('band', band, label, letter, EQ_MIN_DB, EQ_MAX_DB, 0.5, 0)).join('')}
-    </div>
-    <div class="knobs" data-knobs="stems" hidden>
-      ${GROUPS.map(({ group, label }) => knob('group', group, label, letter, 0, 1, 0.01, 1)).join('')}
-    </div>
-    <div class="filter-knob">
-      ${knob('filter', 'filter', 'Filtro', letter, -1, 1, 0.01, 0)}
-    </div>
+    <div class="knobs" data-knobs="eq"></div>
+    <div class="knobs" data-knobs="stems" hidden></div>
+    <div class="filter-knob" data-el="filter"></div>
     <input type="range" class="fader" data-el="volume" min="0" max="1" step="0.01" value="0.8"
       aria-label="Volumen del canal ${letter}" />
   `;
@@ -97,44 +103,88 @@ function channelStrip(letter: string, channel: Channel, deck: Deck): HTMLElement
     apply();
   }
 
-  for (const { band } of BANDS) {
-    const input = $<HTMLInputElement>(`[data-band="${band}"]`);
-    const output = $<HTMLOutputElement>(`[data-band-value="${band}"]`);
-    bindSlider(input, 0, (db) => {
-      eqValues[band] = db;
-      output.textContent = db > 0 ? `+${db}` : String(db);
-      // Si la banda está casi quitada del todo, la marcamos ("kill").
-      input.classList.toggle('killed', db <= EQ_MIN_DB + 1);
-      apply();
+  // GAIN
+  $('[data-el="gain"]').append(
+    createKnob({
+      label: 'Gain',
+      ariaLabel: `Ganancia del canal ${letter}`,
+      min: GAIN_MIN_DB,
+      max: GAIN_MAX_DB,
+      value: 0,
+      defaultValue: 0,
+      step: 0.5,
+      bipolar: true,
+      format: formatDb,
+      onInput: (db) => channel.setGain(db),
+    }).el,
+  );
+
+  // Ruedas de EQ
+  for (const { band, label } of BANDS) {
+    const knob = createKnob({
+      label,
+      ariaLabel: `${label} del canal ${letter}`,
+      min: EQ_MIN_DB,
+      max: EQ_MAX_DB,
+      value: 0,
+      defaultValue: 0,
+      center: 0, // arriba = 0 dB (izquierda hasta -24, derecha hasta +6)
+      step: 0.5,
+      bipolar: true,
+      format: (db) => (db <= EQ_MIN_DB + 1 ? 'KILL' : formatDb(db)),
+      isKilled: (db) => db <= EQ_MIN_DB + 1, // banda quitada del todo: en rojo
+      onInput: (db) => {
+        eqValues[band] = db;
+        apply();
+      },
     });
+    $('[data-knobs="eq"]').append(knob.el);
   }
 
   // Ruedas de stems: mueven el volumen del stem en el plato…
-  for (const { group } of GROUPS) {
-    bindSlider($<HTMLInputElement>(`[data-group="${group}"]`), 1, (level) => deck.setStemGroup(group, level));
+  const stemKnobs = {} as Record<StemGroup, Knob>;
+  for (const { group, label } of GROUPS) {
+    stemKnobs[group] = createKnob({
+      label,
+      ariaLabel: `${label} del canal ${letter}`,
+      // Arriba = 100 % (normal). Izquierda: hasta quitarlo (0 %).
+      // Derecha: subirlo por encima de lo normal (hasta 150 %).
+      min: 0,
+      max: STEM_MAX,
+      value: 1,
+      defaultValue: 1,
+      center: 1,
+      step: 0.01,
+      bipolar: true,
+      format: (v) => `${Math.round(v * 100)}%`,
+      isKilled: (v) => v <= 0.02,
+      onInput: (v) => deck.setStemGroup(group, v),
+    });
+    $('[data-knobs="stems"]').append(stemKnobs[group].el);
   }
 
   // …y cuando el plato cambia (pads, Acapella, Instrumental), las ruedas se
   // colocan solas donde toca. Así pads y ruedas siempre dicen lo mismo.
-  function showStemLevels(): void {
-    for (const { group } of GROUPS) {
-      const input = $<HTMLInputElement>(`[data-group="${group}"]`);
-      const level = deck.groupLevel(group);
-      input.value = String(level);
-      $<HTMLOutputElement>(`[data-group-value="${group}"]`).textContent = `${Math.round(level * 100)}%`;
-      input.classList.toggle('killed', level <= 0.02);
-    }
-  }
+  const showStemLevels = () => {
+    for (const { group } of GROUPS) stemKnobs[group].set(deck.groupLevel(group), true);
+  };
   deck.addEventListener('stems', showStemLevels);
-  showStemLevels();
 
   // Filtro: centro = apagado, izquierda = paso bajo, derecha = paso alto.
-  const filterOutput = $<HTMLOutputElement>('[data-filter-value="filter"]');
-  bindSlider($<HTMLInputElement>('[data-filter="filter"]'), 0, (v) => {
-    channel.setFilter(v);
-    const pct = Math.round(Math.abs(v) * 100);
-    filterOutput.textContent = Math.abs(v) < 0.02 ? 'off' : `${v < 0 ? 'LP' : 'HP'} ${pct}%`;
-  });
+  $('[data-el="filter"]').append(
+    createKnob({
+      label: 'Filtro',
+      ariaLabel: `Filtro del canal ${letter}`,
+      min: -1,
+      max: 1,
+      value: 0,
+      defaultValue: 0,
+      step: 0.01,
+      bipolar: true,
+      format: (v) => (Math.abs(v) < 0.02 ? 'off' : `${v < 0 ? 'LP' : 'HP'} ${Math.round(Math.abs(v) * 100)}%`),
+      onInput: (v) => channel.setFilter(v),
+    }).el,
+  );
 
   for (const btn of strip.querySelectorAll<HTMLButtonElement>('[data-mode]')) {
     btn.addEventListener('click', () => setMode(btn.dataset.mode as Mode));
