@@ -1,6 +1,6 @@
 /**
- * La parte VISUAL de un plato: título, BPM, tiempos, onda, play/pausa,
- * tempo y los pads de stems.
+ * La parte VISUAL de un plato: título, BPM, tiempos, onda, CUE/PLAY/SYNC,
+ * tempo, los pads de stems y los loops.
  *
  * Es una función que sirve para cualquier plato: la llamamos una vez para
  * el A y otra para el B, cada una con su propio Deck (motor de audio).
@@ -18,6 +18,24 @@ const TEMPO_RANGES = [8, 16, 33, 50];
 
 /** Velocidad del SYNC: cuánto tempo cambia por segundo (en %). */
 const SYNC_SPEED = 2;
+
+/** Tamaños de loop, en golpes. */
+const LOOP_SIZES = [1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8, 16, 32];
+
+/** "4", "1/2"… para enseñar un tamaño de loop. */
+function formatBeats(beats: number): string {
+  beats = Math.round(beats * 100) / 100; // 3.9999 → 4
+  if (beats >= 1) return Number.isInteger(beats) ? String(beats) : beats.toFixed(1);
+  const inverse = Math.round(1 / beats);
+  return Math.abs(1 / inverse - beats) < 0.01 ? `1/${inverse}` : beats.toFixed(2);
+}
+
+/**
+ * Ajustes compartidos por los dos platos.
+ * `assist`: asistencia de golpe. Al dar PLAY con la otra canción sonando, se
+ * arranca justo en su golpe; y SYNC, además del BPM, cuadra los golpes.
+ */
+export const deckSettings = { assist: true };
 
 const PADS: { stem: StemName; label: string }[] = [
   { stem: 'vocals', label: 'Voces' },
@@ -110,6 +128,20 @@ export function createDeckView(
       <button class="pad mode-pad" data-el="acapella" disabled aria-pressed="false">Acapella</button>
       <button class="pad mode-pad" data-el="instrumental" disabled aria-pressed="false">Instrumental</button>
     </div>
+
+    <div class="loops">
+      <div class="loop-tabs" role="group" aria-label="Tipo de loop del plato ${letter}">
+        <button data-loop-mode="snap" aria-pressed="true" title="Loop ajustado: empieza y acaba justo en un golpe">L.AJUST</button>
+        <button data-loop-mode="free" aria-pressed="false" title="Loop personalizado: empieza justo cuando pulsas, haya golpe o no">L.PERS</button>
+      </div>
+      <div class="loop-row">
+        <button data-el="loop-in" disabled title="Marca el inicio del loop">IN</button>
+        <button data-el="loop-out" disabled title="Marca el final y empieza a repetirse">OUT</button>
+        <button class="small" data-el="loop-half" disabled aria-label="Loop a la mitad">‹</button>
+        <button class="loop-btn" data-el="loop" disabled>LOOP <span data-el="loop-size">4</span></button>
+        <button class="small" data-el="loop-double" disabled aria-label="Loop al doble">›</button>
+      </div>
+    </div>
   `;
 
   // Buscamos cada elemento DENTRO de este plato (así A y B no se mezclan).
@@ -178,6 +210,11 @@ export function createDeckView(
   /** Coloca el fader y los textos según el tempo real del plato. */
   function showTempo(): void {
     const pct = (deck.tempo - 1) * 100;
+    // Si el tempo se sale del rango del fader (p. ej. tras un SYNC), lo ampliamos.
+    if (Math.abs(pct) > range + 0.01) {
+      const fits = TEMPO_RANGES.find((r) => r >= Math.abs(pct));
+      if (fits) return setRange(fits);
+    }
     tempoInput.value = String(pct);
     tempoValue.textContent = `${pct > 0.005 ? '+' : ''}${pct.toFixed(1)} %`;
     updateSync();
@@ -213,8 +250,19 @@ export function createDeckView(
     const finalRate = 1 + (Math.sign(rate - 1) * Math.min(pct, range)) / 100;
     // Poco a poco: SYNC_SPEED % por segundo (mínimo 1 s, máximo 8 s).
     const change = Math.abs(finalRate - deck.tempo) * 100;
+    if (change < 0.01) {
+      // El BPM ya está igualado: solo falta (si sonando las dos) cuadrar los golpes.
+      if (deckSettings.assist) deck.alignPhaseTo(other);
+      return;
+    }
     const seconds = Math.min(8, Math.max(1, change / SYNC_SPEED));
     deck.glideTempo(finalRate, seconds * 1000);
+    // Con la asistencia, al terminar de igualar el BPM cuadramos también los golpes.
+    if (deckSettings.assist) {
+      setTimeout(() => {
+        if (!deck.isGliding) deck.alignPhaseTo(other);
+      }, seconds * 1000 + 100);
+    }
   }
 
   /** ¿Están ya los dos platos al mismo BPM? (para encender el botón SYNC) */
@@ -232,9 +280,56 @@ export function createDeckView(
 
   async function toggle(): Promise<void> {
     if (!deck.loaded) return;
-    await deck.toggle();
+    // Con la asistencia y la otra canción sonando, PLAY arranca justo en su golpe.
+    if (!deck.isPlaying && deckSettings.assist && other.isPlaying) await deck.playAlignedTo(other);
+    else await deck.toggle();
     updatePlayButton();
   }
+
+  // --- Loops ---------------------------------------------------------------------
+  const loopInBtn = el<HTMLButtonElement>('loop-in');
+  const loopOutBtn = el<HTMLButtonElement>('loop-out');
+  const loopBtn = el<HTMLButtonElement>('loop');
+  const loopSizeEl = el('loop-size');
+  const loopHalfBtn = el<HTMLButtonElement>('loop-half');
+  const loopDoubleBtn = el<HTMLButtonElement>('loop-double');
+  const loopButtons = [loopInBtn, loopOutBtn, loopBtn, loopHalfBtn, loopDoubleBtn];
+  /** true = L.AJUST (al golpe), false = L.PERS (libre). */
+  let snap = true;
+  let sizeIndex = LOOP_SIZES.indexOf(4);
+
+  function updateLoop(): void {
+    const loop = deck.loop;
+    loopBtn.classList.toggle('on', loop !== null);
+    loopInBtn.classList.toggle('on', deck.loopIn !== null);
+    // Con un loop activo enseñamos su tamaño real; si no, el elegido.
+    loopSizeEl.textContent = formatBeats(loop ? (loop.end - loop.start) / deck.beatLength : LOOP_SIZES[sizeIndex]);
+    for (const btn of root.querySelectorAll<HTMLButtonElement>('[data-loop-mode]')) {
+      btn.setAttribute('aria-pressed', String((btn.dataset.loopMode === 'snap') === snap));
+    }
+  }
+
+  function changeSize(step: number): void {
+    sizeIndex = Math.min(LOOP_SIZES.length - 1, Math.max(0, sizeIndex + step));
+    deck.resizeLoop(LOOP_SIZES[sizeIndex]); // si hay un loop sonando, cambia ya
+    updateLoop();
+  }
+
+  for (const btn of root.querySelectorAll<HTMLButtonElement>('[data-loop-mode]')) {
+    btn.addEventListener('click', () => {
+      snap = btn.dataset.loopMode === 'snap';
+      updateLoop();
+    });
+  }
+  loopBtn.addEventListener('click', () => {
+    if (deck.loop) deck.exitLoop();
+    else deck.autoLoop(LOOP_SIZES[sizeIndex], snap);
+  });
+  loopInBtn.addEventListener('click', () => deck.markLoopIn(snap));
+  loopOutBtn.addEventListener('click', () => deck.markLoopOut(snap));
+  loopHalfBtn.addEventListener('click', () => changeSize(-1));
+  loopDoubleBtn.addEventListener('click', () => changeSize(1));
+  deck.addEventListener('loop', updateLoop);
 
   async function load(request: LoadRequest): Promise<void> {
     titleEl.textContent = `Cargando ${request.title}…`;
@@ -246,6 +341,8 @@ export function createDeckView(
       titleEl.textContent = request.title;
       artistEl.textContent = request.artist;
       playBtn.disabled = cueBtn.disabled = false;
+      for (const btn of loopButtons) btn.disabled = false;
+      updateLoop();
     } catch (err) {
       console.error(err);
       titleEl.textContent = 'No se pudo leer esa canción. Prueba con un MP3 o WAV.';
@@ -269,6 +366,7 @@ export function createDeckView(
         if (library && track) {
           await d.loadStems(await library.readStems(track), {
             bpm: track.bpm,
+            beat: track.beat,
             lyrics: await library.readLyrics(track),
           });
         } else {
@@ -332,7 +430,7 @@ export function createDeckView(
       timeEl.textContent = formatTime(position);
       remainingEl.textContent = `-${formatTime(Math.max(0, deck.duration - position))}`;
       const d = deck.duration;
-      waveform.draw(d ? position / d : 0, d ? deck.cuePoint / d : null);
+      waveform.draw(d ? position / d : 0, d ? deck.cuePoint / d : null, deck.loop);
       cueBtn.classList.toggle('on', deck.isPlaying && Math.abs(deck.position - deck.cuePoint) < 0.05);
     },
   };

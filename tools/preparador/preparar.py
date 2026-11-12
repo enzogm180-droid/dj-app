@@ -50,7 +50,7 @@ import torch
 from demucs.apply import apply_model
 from demucs.pretrained import get_model
 
-from bpm import detect_bpm
+from bpm import detect_beats
 from letra import load_model as load_whisper
 from letra import transcribe
 
@@ -60,6 +60,9 @@ STEMS_DIRNAME = "_stems"
 LIBRARY_FILENAME = "biblioteca.json"
 LIBRARY_VERSION = 1
 LYRICS_FILENAME = "letra.json"
+# Versión del cálculo de la rejilla de golpes. Si la mejoramos, subimos el
+# número y el preparador recalcula la rejilla de las canciones ya hechas.
+GRID_VERSION = 2
 
 
 # --- Utilidades ------------------------------------------------------------------
@@ -222,14 +225,19 @@ def main() -> int:
         save_library(library, library_path)
         print(f"Actualizada la ruta de {moved} canciones renombradas o movidas")
 
-    # Canciones separadas con una versión anterior del preparador, sin BPM: lo calculamos ahora.
-    missing_bpm = [e for e in library["tracks"].values() if "bpm" not in e and is_done(e, stems_dir)]
+    # Canciones separadas con una versión anterior del preparador, sin BPM o sin
+    # rejilla de golpes ("beat" = segundo del primer golpe): lo calculamos ahora.
+    missing_bpm = [
+        e for e in library["tracks"].values() if e.get("grid") != GRID_VERSION and is_done(e, stems_dir)
+    ]
     if missing_bpm:
-        print(f"Calculando el BPM de {len(missing_bpm)} canciones ya separadas…")
+        print(f"Calculando BPM y golpes de {len(missing_bpm)} canciones ya separadas…")
         for entry in missing_bpm:
             drums = decode(stems_dir / entry["folder"] / entry["stems"]["drums"])
-            entry["bpm"] = detect_bpm(drums.numpy(), SAMPLE_RATE)
-            print(f"  {entry['title']}: {entry['bpm']} BPM")
+            grid = detect_beats(drums.numpy(), SAMPLE_RATE)
+            entry["bpm"], entry["beat"] = grid if grid else (None, None)
+            entry["grid"] = GRID_VERSION
+            print(f"  {entry['title']}: {entry['bpm']} BPM, primer golpe en {entry['beat']} s")
         save_library(library, library_path)
 
     # Lo mismo con la letra.
@@ -276,7 +284,8 @@ def main() -> int:
                 duration = wav.shape[1] / SAMPLE_RATE
                 stems = separate(model, wav, device, args.pasadas)
                 # El BPM se calcula con la batería: sin voces ni melodía es más fiable.
-                bpm = detect_bpm(stems["drums"].numpy(), SAMPLE_RATE)
+                grid = detect_beats(stems["drums"].numpy(), SAMPLE_RATE)
+                bpm, first_beat = grid if grid else (None, None)
 
                 # Escribimos en una carpeta temporal y la renombramos al final:
                 # una canción solo aparece como "hecha" si está completa.
@@ -302,6 +311,8 @@ def main() -> int:
                     **read_tags(song),
                     "duration": round(duration, 2),
                     "bpm": bpm,
+                    "beat": first_beat,
+                    "grid": GRID_VERSION,
                     "folder": song_id,
                     "stems": files,
                     **({"lyrics": LYRICS_FILENAME} if words is not None else {}),

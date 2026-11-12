@@ -14,7 +14,8 @@
   --stem-drums: #c9d1d9;
   --stem-bass: #e5484d;
   --wave-main: #5f9ea0; /* canción sin stems */
-  --bass-mark: #ff6b3d; /* rectangulitos de "aquí hay bajo" */
+  --bass-mark: #ff6b3d; /* rectangulitos de cada boom */
+  --loop: #4ade80; /* zona del loop */
   color-scheme: dark;
 }
 
@@ -639,4 +640,80 @@ button:disabled {
   height: 1px;
   overflow: hidden;
   clip: rect(0 0 0 0);
+}
+
+/* --- Asistencia de golpe (arriba) ------------------------------------------------ */
+.assist {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-right: auto;
+  margin-left: 16px;
+}
+
+.assist[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* --- Loops ------------------------------------------------------------------------ */
+.loops {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #353a42;
+}
+
+/* Pestañas L.AJUST / L.PERS */
+.loop-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.loop-tabs button {
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 0;
+}
+
+.loop-tabs button:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.loop-tabs button:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.loop-tabs button[aria-pressed='true'] {
+  background: var(--loop);
+  border-color: var(--loop);
+  color: var(--bg);
+}
+
+.loop-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.loop-row button {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.loop-btn {
+  min-width: 84px;
+}
+
+/* Loop sonando, o IN marcado esperando el OUT: en verde. */
+.loop-row button.on {
+  background: var(--loop);
+  border-color: var(--loop);
+  color: var(--bg);
 }
