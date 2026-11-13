@@ -60,6 +60,8 @@ STEMS_DIRNAME = "_stems"
 LIBRARY_FILENAME = "biblioteca.json"
 LIBRARY_VERSION = 1
 LYRICS_FILENAME = "letra.json"
+# La letra de internet que guarda buscar_letras.py (ver ese archivo).
+ONLINE_LYRICS_FILENAME = "letra-online.json"
 # Versión del cálculo de la rejilla de golpes. Si la mejoramos, subimos el
 # número y el preparador recalcula la rejilla de las canciones ya hechas.
 GRID_VERSION = 2
@@ -153,6 +155,24 @@ def find_songs(music_dir: Path, stems_dir: Path) -> list[Path]:
     return sorted(songs, key=lambda p: str(p).lower())
 
 
+def online_lyrics_status(entry: dict, stems_dir: Path) -> str:
+    """¿Qué letra de internet tiene esta canción? (la que busca buscar_letras.py)
+
+    "sincronizada" = la buena, con tiempos (la app usa esta)
+    "solo texto"   = encontrada pero sin tiempos (la app no la puede colocar)
+    "no encontrada"
+    "sin buscar"   = aún no se ha lanzado buscar_letras.py con esta canción
+    """
+    path = stems_dir / entry["folder"] / ONLINE_LYRICS_FILENAME
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "sin buscar"
+    if not data.get("encontrada"):
+        return "no encontrada"
+    return "sincronizada" if data.get("sincronizada") else "solo texto"
+
+
 def is_done(entry: dict | None, stems_dir: Path) -> bool:
     if not entry:
         return False
@@ -192,7 +212,13 @@ def main() -> int:
                         help="Idioma de las letras, p. ej. 'es'. Si no lo pones, lo adivina en cada canción")
     parser.add_argument("--rehacer-letra", action="store_true",
                         help="Vuelve a sacar la letra de TODAS las canciones (p. ej. con un modelo mejor)")
+    parser.add_argument("--solo-sin-letra-online", action="store_true",
+                        help="Whisper SOLO para las canciones sin letra de internet sincronizada "
+                             "(las que buscar_letras.py no encontró o encontró sin tiempos)")
     args = parser.parse_args()
+    if args.solo_sin_letra_online and args.sin_letra:
+        print("--solo-sin-letra-online y --sin-letra no tienen sentido juntas: elige una.")
+        return 1
 
     # El modelo de la letra se carga solo si hace falta, y una única vez.
     whisper = None
@@ -259,6 +285,25 @@ def main() -> int:
         e for e in library["tracks"].values()
         if (args.rehacer_letra or "lyrics" not in e) and is_done(e, stems_dir)
     ]
+
+    # Con --solo-sin-letra-online, Whisper solo para las que NO tienen la letra
+    # buena de internet (la app prefiere esa: hacer Whisper en las demás es perder el tiempo).
+    if args.solo_sin_letra_online:
+        without_online = []
+        for e in library["tracks"].values():
+            if not is_done(e, stems_dir):
+                continue
+            status = online_lyrics_status(e, stems_dir)
+            if status != "sincronizada":
+                without_online.append((e, status))
+        print(f"\nCanciones SIN letra de internet sincronizada: {len(without_online)}")
+        for e, status in without_online:
+            has_whisper = "lyrics" in e
+            note = " (ya tiene letra de Whisper; usa --rehacer-letra para repetirla)" if has_whisper and not args.rehacer_letra else ""
+            print(f"  · {e['title']} — {status}{note}")
+        todo = {id(e) for e, _ in without_online}
+        missing_lyrics = [e for e in missing_lyrics if id(e) in todo]
+        print()
     if missing_lyrics:
         print(f"Sacando la letra de {len(missing_lyrics)} canciones ya separadas…")
         try:
@@ -276,6 +321,12 @@ def main() -> int:
     print(f"Ya preparadas: {len(songs) - len(pending)} · Pendientes: {len(pending)}")
     if not pending:
         return 0
+    if args.solo_sin_letra_online:
+        # Las canciones nuevas se separan SIN letra: primero hay que buscar su
+        # letra en internet (buscar_letras.py) y después, si falta, Whisper.
+        print("Las canciones nuevas se separan sin letra: luego lanza buscar_letras.py "
+              "y otra vez esto con --solo-sin-letra-online.")
+        args.sin_letra = True
     if args.limite:
         pending = pending[: args.limite]
     if not pending:
