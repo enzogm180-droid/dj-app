@@ -356,6 +356,34 @@ export class Deck extends EventTarget {
     if (restore) this.applyTempo(base);
   }
 
+  // --- Plato (jog) ----------------------------------------------------------
+
+  /** Tempo de antes de empezar a girar el plato con la mano (null = no se está girando). */
+  private bendBase: number | null = null;
+
+  /**
+   * Girar el plato con la canción sonando: la acelera (`amount` > 0) o la
+   * frena (< 0) un momento, como empujar o frenar un vinilo con el dedo.
+   * Sirve para corregir a mano un pequeño desfase. `amount` = 0,05 → +5 %.
+   */
+  bend(amount: number): void {
+    if (!this.playing) return;
+    if (this.bendBase === null) {
+      this.stopGlide();
+      this.stopNudge();
+      this.bendBase = this.rate;
+    }
+    this.applyTempo(this.bendBase * (1 + amount));
+  }
+
+  /** Soltar el plato: vuelve al tempo que tenía. */
+  endBend(): void {
+    if (this.bendBase === null) return;
+    const base = this.bendBase;
+    this.bendBase = null;
+    this.applyTempo(base);
+  }
+
   // --- Hot cues -------------------------------------------------------------
   //
   //  - Botón vacío: guarda el punto donde estás (ajustado al golpe si `snap`).

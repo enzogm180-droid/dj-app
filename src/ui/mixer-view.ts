@@ -65,19 +65,23 @@ function bindSlider(input: HTMLInputElement, defaultValue: number, apply: (value
 
 function channelStrip(letter: string, channel: Channel, deck: Deck): HTMLElement {
   const strip = document.createElement('div');
-  strip.className = 'strip';
+  strip.className = `strip strip-${letter.toLowerCase()}`;
   strip.innerHTML = `
     <span class="strip-letter">${letter}</span>
-    <div class="gain-module" data-el="gain"></div>
-    <div class="mode" role="group" aria-label="Modo de las ruedas del canal ${letter}">
-      <button data-mode="eq" aria-pressed="true">EQ</button>
-      <button data-mode="stems" aria-pressed="false" disabled title="Carga una canción preparada">STEMS</button>
+    <div class="strip-body">
+      <div class="strip-knobs">
+        <div class="gain-module" data-el="gain"></div>
+        <div class="mode" role="group" aria-label="Modo de las ruedas del canal ${letter}">
+          <button data-mode="eq" aria-pressed="true">EQ</button>
+          <button data-mode="stems" aria-pressed="false" disabled title="Carga una canción preparada">STEMS</button>
+        </div>
+        <div class="knobs" data-knobs="eq"></div>
+        <div class="knobs" data-knobs="stems" hidden></div>
+        <div class="filter-knob" data-el="filter"></div>
+      </div>
+      <input type="range" class="fader" data-el="volume" min="0" max="1" step="0.01" value="0.8"
+        aria-label="Volumen del canal ${letter}" />
     </div>
-    <div class="knobs" data-knobs="eq"></div>
-    <div class="knobs" data-knobs="stems" hidden></div>
-    <div class="filter-knob" data-el="filter"></div>
-    <input type="range" class="fader" data-el="volume" min="0" max="1" step="0.01" value="0.8"
-      aria-label="Volumen del canal ${letter}" />
   `;
 
   const $ = <T extends HTMLElement>(sel: string) => strip.querySelector(sel) as T;

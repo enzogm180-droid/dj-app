@@ -7,6 +7,9 @@
  */
 import type { Deck, StemName } from '../audio/deck';
 import type { Library } from '../library/library';
+import type { FxRack } from '../audio/fx';
+import { createFxView } from './fx-view';
+import { Jog } from './jog';
 import { HOT_CUE_COLORS } from './stem-draw';
 import { Waveform } from './waveform';
 
@@ -82,9 +85,11 @@ export function createDeckView(
   deck: Deck,
   /** El otro plato: el que ya suena, al que nos sincronizamos con SYNC. */
   other: Deck,
+  /** Los efectos de este plato. */
+  fx: FxRack,
   getLibrary: () => Library | null,
 ): DeckView {
-  root.classList.add('deck');
+  root.classList.add('deck', `deck-${letter.toLowerCase()}`);
   root.setAttribute('aria-label', `Plato ${letter}`);
   root.innerHTML = `
     <div class="deck-head">
@@ -109,20 +114,9 @@ export function createDeckView(
 
     <canvas class="wave" data-el="wave"></canvas>
 
-    <div class="controls">
-      <div class="transport">
-        <button class="cue" data-el="cue" disabled title="Mantén pulsado para escuchar; al soltar vuelve al punto CUE">CUE</button>
-        <button class="play" data-el="play" disabled aria-label="Play">▶</button>
-        <button class="sync" data-el="sync" disabled title="Iguala poco a poco el BPM al del otro plato">SYNC</button>
-      </div>
-      <div class="tempo">
-        <label>Tempo <output data-el="tempo-value">0.0 %</output></label>
-        <input type="range" data-el="tempo" min="${-TEMPO_RANGES[0]}" max="${TEMPO_RANGES[0]}" step="0.05" value="0"
-          aria-label="Tempo del plato ${letter}" />
-        <button class="small" data-el="tempo-range" title="Rango del fader de tempo">±${TEMPO_RANGES[0]}%</button>
-        <button class="small" data-el="tempo-reset">Reset</button>
-      </div>
-    </div>
+    <div class="deck-body">
+    <div class="deck-main">
+    <div class="fx" data-el="fx"></div>
 
     <div class="pad-pages">
       <div class="pad-tabs" role="group" aria-label="Qué hacen los pads del plato ${letter}">
@@ -163,6 +157,25 @@ export function createDeckView(
         <button class="small" data-el="loop-double" disabled aria-label="Loop al doble">›</button>
       </div>
     </div>
+    </div>
+
+    <div class="jog-col">
+      <canvas class="jog" data-el="jog" aria-label="Plato ${letter}: arrastra en círculo para mover o empujar la canción"></canvas>
+      <div class="transport">
+        <button class="cue" data-el="cue" disabled title="Mantén pulsado para escuchar; al soltar vuelve al punto CUE">CUE</button>
+        <button class="play" data-el="play" disabled aria-label="Play">▶</button>
+        <button class="sync" data-el="sync" disabled title="Iguala poco a poco el BPM al del otro plato">SYNC</button>
+      </div>
+    </div>
+
+    <div class="tempo" role="group" aria-label="Tempo del plato ${letter}">
+      <output data-el="tempo-value">0.0 %</output>
+      <input type="range" data-el="tempo" min="${-TEMPO_RANGES[0]}" max="${TEMPO_RANGES[0]}" step="0.05" value="0"
+        aria-label="Tempo del plato ${letter}" />
+      <button class="small" data-el="tempo-range" title="Rango del fader de tempo">±${TEMPO_RANGES[0]}%</button>
+      <button class="small" data-el="tempo-reset" title="Tempo a 0 %">0%</button>
+    </div>
+    </div>
   `;
 
   // Buscamos cada elemento DENTRO de este plato (así A y B no se mezclan).
@@ -185,6 +198,8 @@ export function createDeckView(
   const acapellaBtn = el<HTMLButtonElement>('acapella');
   const instrumentalBtn = el<HTMLButtonElement>('instrumental');
   const waveform = new Waveform(el<HTMLCanvasElement>('wave'));
+  createFxView(el('fx'), fx, letter);
+  const jog = new Jog(el<HTMLCanvasElement>('jog'), deck, letter);
 
   function updatePlayButton(): void {
     playBtn.textContent = deck.isPlaying ? '❚❚' : '▶';
@@ -489,6 +504,7 @@ export function createDeckView(
       remainingEl.textContent = `-${formatTime(Math.max(0, deck.duration - position))}`;
       const d = deck.duration;
       waveform.draw(d ? position / d : 0, d ? deck.cuePoint / d : null, deck.loop, deck.hotCues);
+      jog.draw();
       cueBtn.classList.toggle('on', deck.isPlaying && Math.abs(deck.position - deck.cuePoint) < 0.05);
     },
   };
