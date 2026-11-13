@@ -249,6 +249,11 @@ async function* listAudio(dir: FileSystemDirectoryHandle, prefix: string): Async
     if (handle.kind === 'directory') {
       if (handle.name === STEMS_DIRNAME || handle.name.startsWith('.')) continue;
       yield* listAudio(handle as FileSystemDirectoryHandle, `${path}/`);
+    } else if (handle.name.startsWith('.')) {
+      // Archivo oculto: sobre todo las "sombras" "._canción.mp3" que crea un Mac
+      // al copiar a un USB. No son audio (pesan unos KB), así que no las listamos.
+      // El preparador (preparar.py → is_hidden) las salta igual.
+      continue;
     } else if (AUDIO_EXTENSIONS.some((ext) => handle.name.toLowerCase().endsWith(ext))) {
       yield path;
     }
