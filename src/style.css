@@ -890,3 +890,623 @@ button:disabled {
 .lane canvas.dragging {
   cursor: grabbing;
 }
+
+/* ==================================================================================
+ * DISEÑO COMPACTO
+ * Todo lo de arriba define los colores y las formas; esta parte final ajusta
+ * los TAMAÑOS para que la app entera quepa en una pantalla, como en un
+ * programa de DJ. Si algo se ve demasiado pequeño o grande, se toca aquí.
+ * ================================================================================== */
+#app {
+  max-width: none;
+  padding: 8px 10px;
+}
+
+.topbar {
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.topbar h1 {
+  font-size: 16px;
+}
+
+.hint {
+  font-size: 11px;
+}
+
+/* Ondas grandes de arriba */
+.lanes {
+  padding: 6px 8px 4px;
+  margin-bottom: 8px;
+}
+
+.lane canvas {
+  height: 84px;
+}
+
+.lane + .lane {
+  margin-top: 4px;
+}
+
+.legend {
+  margin: 4px 0 0 30px;
+  font-size: 11px;
+}
+
+/* Platos y mixer: misma altura los tres */
+.console {
+  grid-template-columns: minmax(0, 1fr) 250px minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
+}
+
+.deck,
+.mixer {
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+/* Cabecera del plato */
+.deck-head {
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.deck-letter {
+  width: 26px;
+  height: 26px;
+  font-size: 13px;
+}
+
+.track-title {
+  font-size: 14px;
+}
+
+.track-artist {
+  font-size: 11px;
+}
+
+.bpm {
+  font-size: 20px;
+}
+
+.track-time {
+  font-size: 12px;
+}
+
+.load {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.wave {
+  height: 46px;
+}
+
+/* Cuerpo del plato: columna principal (FX, pads, loops) + tempo vertical.
+   En el plato B, el tempo va a la izquierda: los dos tempos quedan junto al mixer. */
+.deck-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 58px;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.deck-b .deck-body {
+  grid-template-columns: 58px minmax(0, 1fr);
+}
+
+.deck-b .deck-body .tempo {
+  order: -1;
+}
+
+.deck-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Efectos: 3 filas */
+.fx {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fx-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) minmax(60px, 90px);
+  gap: 6px;
+  align-items: center;
+}
+
+.fx-on {
+  padding: 3px 0;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.fx-row.on .fx-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+.fx select {
+  min-width: 0;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid #353a42;
+  border-radius: 5px;
+  padding: 3px 6px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.fx input[type='range'] {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/* Pads y pestañas, más pequeños */
+.pad-pages {
+  margin-top: 0;
+}
+
+.pad-tabs {
+  margin-bottom: 4px;
+}
+
+.pad-tabs button {
+  padding: 2px 10px;
+  font-size: 10px;
+}
+
+.pads {
+  gap: 4px;
+}
+
+.pad {
+  padding: 6px 2px;
+  font-size: 12px;
+}
+
+/* Loops en una sola fila */
+.loops {
+  margin-top: 0;
+  padding-top: 6px;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.loop-tabs button {
+  padding: 4px 6px;
+  font-size: 10px;
+}
+
+.loop-row {
+  gap: 4px;
+}
+
+.loop-row button {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.loop-btn {
+  min-width: 64px;
+}
+
+/* Tempo vertical (arriba = más rápido) */
+.tempo {
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.tempo output {
+  width: auto;
+  font-size: 11px;
+}
+
+.tempo input[type='range'] {
+  flex: 1;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  min-height: 110px;
+  width: 26px;
+}
+
+.tempo .small {
+  width: 100%;
+  padding: 2px 0;
+  font-size: 10px;
+}
+
+/* CUE · PLAY · SYNC */
+.transport {
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.play {
+  width: 46px;
+  height: 46px;
+  font-size: 17px;
+}
+
+.cue,
+.sync {
+  width: 64px;
+  height: 34px;
+  font-size: 12px;
+}
+
+/* Mixer: ruedas en columna y fader al lado (en B, al revés: espejo) */
+.strips {
+  gap: 6px;
+}
+
+.strip {
+  gap: 4px;
+}
+
+.strip-body {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+}
+
+.strip-b .strip-body {
+  flex-direction: row-reverse;
+}
+
+.strip-knobs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.strip .fader {
+  align-self: stretch;
+  height: auto;
+  width: 22px !important;
+  margin: 0 !important;
+}
+
+.knob-dial svg {
+  width: 36px;
+  height: 36px;
+}
+
+.knob {
+  font-size: 10px;
+}
+
+.knob-output {
+  font-size: 9px;
+}
+
+.mixer .knobs {
+  gap: 0;
+}
+
+.gain-module {
+  padding: 2px 0;
+}
+
+.filter-knob {
+  padding-top: 4px;
+}
+
+.mode button {
+  padding: 2px 0;
+  font-size: 10px;
+}
+
+.master {
+  margin-top: 6px;
+}
+
+.xfader {
+  margin-top: 6px;
+  padding-top: 6px;
+}
+
+/* Biblioteca: ocupa lo que quede abajo */
+.library {
+  margin-top: 8px;
+  padding: 8px 10px;
+}
+
+.library-bar {
+  margin-bottom: 6px;
+}
+
+.library-bar button {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.library-list {
+  max-height: 30vh;
+}
+
+.library td {
+  padding: 3px 8px;
+  font-size: 13px;
+}
+
+/* La app ocupa exactamente la ventana: la lista de canciones se queda con el
+   espacio que sobre y tiene su propia barra para desplazarse. Así la página
+   nunca hace scroll y los platos están siempre a la vista. */
+@media (min-width: 901px) and (min-height: 700px) {
+  body {
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  .library {
+    flex: 1;
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .library-list {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+  }
+}
+
+/* Pantallas bajas (portátiles de 768 px de alto o menos): todo un poco más
+   apretado y las ruedas del mixer en dos columnas, para que quepa sin scroll. */
+@media (max-height: 820px) {
+  .lane canvas {
+    height: 58px;
+  }
+
+  .legend {
+    display: none;
+  }
+
+  .wave {
+    height: 34px;
+  }
+
+  .strip-knobs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-content: start;
+  }
+
+  .strip-knobs .gain-module,
+  .strip-knobs .mode {
+    grid-column: 1 / -1;
+  }
+
+  /* Las 3 ruedas EQ/stems y el filtro, en una cuadrícula de 2 × 2 */
+  .strip-knobs .knobs {
+    display: contents;
+  }
+
+  .strip-knobs .knobs[hidden] {
+    display: none;
+  }
+
+  .filter-knob {
+    padding-top: 0;
+    border-top: none;
+  }
+
+  .tempo input[type='range'] {
+    min-height: 80px;
+  }
+}
+
+/* ==================================================================================
+ * PLATO VINILO (jog) y más espacio para la lista
+ * Cada plato queda así:   [ FX · pads · loops ] [ plato + CUE ▶ SYNC ] [ tempo ]
+ * y el B en espejo, para que los dos tempos queden junto al mixer.
+ * ================================================================================== */
+.deck-body {
+  grid-template-columns: minmax(0, 1fr) 172px 52px;
+  grid-template-areas: 'main jog tempo';
+  align-items: stretch;
+}
+
+.deck-b .deck-body {
+  grid-template-columns: 52px 172px minmax(0, 1fr);
+  grid-template-areas: 'tempo jog main';
+}
+
+.deck-body .deck-main {
+  grid-area: main;
+}
+
+.deck-body .jog-col {
+  grid-area: jog;
+}
+
+.deck-body .tempo {
+  grid-area: tempo;
+  order: 0;
+}
+
+.jog-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.jog {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.jog:active {
+  cursor: grabbing;
+}
+
+/* CUE · PLAY · SYNC, debajo del plato */
+.jog-col .transport {
+  margin-top: 0;
+  gap: 6px;
+}
+
+.jog-col .play {
+  width: 38px;
+  height: 38px;
+  font-size: 15px;
+}
+
+.jog-col .cue,
+.jog-col .sync {
+  width: 54px;
+  height: 30px;
+  font-size: 11px;
+}
+
+/* --- Más espacio para la lista de canciones --------------------------------------- */
+.topbar {
+  margin-bottom: 4px;
+}
+
+.lanes {
+  padding: 4px 6px 3px;
+  margin-bottom: 6px;
+}
+
+.lane canvas {
+  height: 72px;
+}
+
+.legend {
+  margin-top: 3px;
+}
+
+.deck,
+.mixer {
+  padding: 6px 8px;
+}
+
+.deck-head {
+  margin-bottom: 4px;
+}
+
+.wave {
+  height: 38px;
+}
+
+.deck-body {
+  margin-top: 6px;
+}
+
+.pad {
+  padding: 5px 2px;
+}
+
+/* Mixer: ruedas siempre en 2 columnas (menos alto) */
+.strip-knobs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-content: start;
+}
+
+.strip-knobs .gain-module,
+.strip-knobs .mode {
+  grid-column: 1 / -1;
+}
+
+.strip-knobs .knobs {
+  display: contents;
+}
+
+.strip-knobs .knobs[hidden] {
+  display: none;
+}
+
+.filter-knob {
+  padding-top: 0;
+  border-top: none;
+}
+
+/* Lista: filas más bajas */
+.library {
+  margin-top: 6px;
+  padding: 6px 8px;
+}
+
+.library-bar {
+  margin-bottom: 4px;
+}
+
+.library td {
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.library th {
+  padding: 4px 8px;
+}
+
+.lib-artist {
+  display: none; /* el artista ya suele ir en el título del archivo */
+}
+
+.load-buttons .small {
+  padding: 1px 10px;
+  font-size: 11px;
+}
+
+/* Pantallas estrechas (portátiles de 1366 px): plato y tempo un poco más pequeños. */
+@media (max-width: 1500px) {
+  .deck-body {
+    grid-template-columns: minmax(0, 1fr) 140px 46px;
+  }
+
+  .deck-b .deck-body {
+    grid-template-columns: 46px 140px minmax(0, 1fr);
+  }
+
+  .jog {
+    width: 124px;
+    height: 124px;
+  }
+
+  .jog-col .cue,
+  .jog-col .sync {
+    width: 46px;
+  }
+
+  .loops {
+    flex-wrap: wrap;
+  }
+
+  .loop-row button {
+    padding: 4px 6px;
+  }
+
+  .loop-btn {
+    min-width: 56px;
+  }
+}

@@ -2,14 +2,15 @@
  * Punto de entrada de la app: monta los dos platos, el mixer y la
  * biblioteca, y los conecta.
  *
- *   Plato A ─┐
- *            ├─ Mixer ─→ altavoces
- *   Plato B ─┘
+ *   Plato A → Efectos A ─┐
+ *                        ├─ Mixer ─→ altavoces
+ *   Plato B → Efectos B ─┘
  *       ↑
  *   Biblioteca (tu carpeta de música y sus stems)
  */
 import './style.css';
 import { Deck, setupDecks } from './audio/deck';
+import { FxRack } from './audio/fx';
 import { Mixer } from './audio/mixer';
 import { createDeckView, deckSettings, type DeckView } from './ui/deck-view';
 import { createLibraryView } from './ui/library-view';
@@ -52,8 +53,13 @@ app.innerHTML = `
 const ctx = new AudioContext();
 await setupDecks(ctx); // prepara el key lock (mantener el tono al cambiar el tempo)
 const mixer = new Mixer(ctx);
-const deckA = new Deck(ctx, mixer.a.input);
-const deckB = new Deck(ctx, mixer.b.input);
+// Plato → efectos (3 ranuras) → canal del mixer. Los efectos con ritmo
+// necesitan saber cuánto dura un golpe AHORA (BPM de la canción × tempo).
+const beatSeconds = (deck: Deck | undefined) => (deck ? deck.beatLength / deck.tempo : 0.5);
+const fxA = new FxRack(ctx, mixer.a.input, () => beatSeconds(deckA));
+const fxB = new FxRack(ctx, mixer.b.input, () => beatSeconds(deckB));
+const deckA: Deck = new Deck(ctx, fxA.input);
+const deckB: Deck = new Deck(ctx, fxB.input);
 
 const libraryView = createLibraryView(document.getElementById('library')!, (track, library, letter) => {
   const view = letter === 'A' ? viewA : viewB;
@@ -85,8 +91,8 @@ const libraryView = createLibraryView(document.getElementById('library')!, (trac
 });
 
 const getLibrary = () => libraryView.library;
-const viewA: DeckView = createDeckView(document.getElementById('deck-a')!, 'A', deckA, deckB, getLibrary);
-const viewB: DeckView = createDeckView(document.getElementById('deck-b')!, 'B', deckB, deckA, getLibrary);
+const viewA: DeckView = createDeckView(document.getElementById('deck-a')!, 'A', deckA, deckB, fxA, getLibrary);
+const viewB: DeckView = createDeckView(document.getElementById('deck-b')!, 'B', deckB, deckA, fxB, getLibrary);
 createMixerView(document.getElementById('mixer')!, mixer, deckA, deckB);
 
 // Solo mientras desarrollamos (npm run dev): deja los platos a mano en la
