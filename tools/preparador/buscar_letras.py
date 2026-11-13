@@ -24,6 +24,7 @@ Cómo se usa (desde la carpeta dj-app):
 
 Opciones:
     --reintentar   vuelve a buscar las que la otra vez NO se encontraron
+                   o se encontraron solo como texto (sin tiempos)
     --limite N     buscar como mucho N canciones (para probar)
 
 Se puede parar con Ctrl + C: al relanzarlo salta las que ya buscó. Las
@@ -158,7 +159,8 @@ def write_json_safe(path: Path, data) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Busca en internet la letra de las canciones ya separadas.")
     parser.add_argument("musica", type=Path, help="La misma carpeta de música que usa el preparador")
-    parser.add_argument("--reintentar", action="store_true", help="Volver a buscar las que no se encontraron")
+    parser.add_argument("--reintentar", action="store_true",
+                        help="Volver a buscar las no encontradas y las que solo tenían texto sin tiempos")
     parser.add_argument("--limite", type=int, default=0, help="Buscar como mucho N canciones (0 = todas)")
     args = parser.parse_args()
 
@@ -179,8 +181,9 @@ def main() -> int:
         out = folder / ONLINE_FILENAME
         if out.exists():
             previous = json.loads(out.read_text(encoding="utf-8"))
-            if previous.get("encontrada") or not args.reintentar:
-                continue  # ya buscada
+            complete = previous.get("encontrada") and previous.get("sincronizada")
+            if complete or not args.reintentar:
+                continue  # ya buscada (con --reintentar se repiten las no encontradas y las sin tiempos)
         pending.append(entry)
     print(f"Canciones separadas: {len(tracks)} · Por buscar: {len(pending)}")
     if args.limite:
@@ -196,11 +199,16 @@ def main() -> int:
             duration = float(entry.get("duration") or 0)
             print(f"[{i}/{len(pending)}] {title} — {artist or '?'}", end=" … ", flush=True)
             try:
+                # Probamos las distintas formas de preguntar. Si una solo trae la
+                # letra SIN tiempos, la guardamos de reserva y seguimos probando
+                # por si otra la tiene sincronizada.
                 match = None
                 for params in queries(title, artist):
-                    match = best_match(search(session, params), duration)
+                    candidate = best_match(search(session, params), duration)
                     time.sleep(PAUSE)
-                    if match:
+                    if candidate and (match is None or candidate.get("syncedLyrics")):
+                        match = candidate
+                    if match and match.get("syncedLyrics"):
                         break
             except (requests.RequestException, ValueError) as err:
                 # Sin conexión o el servidor falla: NO guardamos nada, así se

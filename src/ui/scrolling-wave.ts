@@ -217,5 +217,17 @@ export class ScrollingWave {
       g.fillText(word.w, x, y);
       lastRight = x + w;
     }
+
+    // Etiqueta en la esquina: de dónde sale esta letra.
+    //   "internet" = escrita por personas (buscar_letras.py), palabras colocadas sobre la voz.
+    //   "IA"       = adivinada por Whisper escuchando el stem de voces.
+    const label = this.deck.lyricsSource === 'internet' ? 'letra: internet' : 'letra: IA';
+    g.font = `${10 * ratio}px system-ui, sans-serif`;
+    const lw = g.measureText(label).width;
+    const lx = width - lw - 6 * ratio;
+    g.fillStyle = css.getPropertyValue('--bg');
+    g.fillRect(lx - 4 * ratio, 2 * ratio, lw + 8 * ratio, lyricsH - 4 * ratio);
+    g.fillStyle = css.getPropertyValue('--muted');
+    g.fillText(label, lx, y);
   }
 }
