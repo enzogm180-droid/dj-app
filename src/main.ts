@@ -72,7 +72,7 @@ const libraryView = createLibraryView(document.getElementById('library')!, (trac
           id: track.stems.folder, // la huella del archivo: no cambia aunque lo renombres
           bpm: track.bpm,
           beat: track.beat,
-          lyrics: await library.readLyrics(track),
+          ...(await library.readLyrics(track)), // letra (de internet o de Whisper)
         });
       } else {
         await deck.load(await library.readTrack(track), {

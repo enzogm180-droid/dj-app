@@ -440,7 +440,7 @@ export function createDeckView(
             id: track.stems!.folder,
             bpm: track.bpm,
             beat: track.beat,
-            lyrics: await library.readLyrics(track),
+            ...(await library.readLyrics(track)), // letra (de internet o de Whisper)
           });
         } else {
           await d.load(data, { id: `archivo:${file.name}:${file.size}` });

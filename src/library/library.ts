@@ -14,9 +14,12 @@
  * así no tienes que buscarla cada vez: solo confirmar el permiso con un clic.
  */
 import type { LyricWord, StemName } from '../audio/deck';
+import type { LyricLine } from '../audio/lyrics-align';
 
 const AUDIO_EXTENSIONS = ['.mp3', '.wav', '.flac', '.m4a', '.aac', '.aiff', '.aif', '.ogg', '.opus'];
 const STEMS_DIRNAME = '_stems';
+/** La letra que descarga de internet tools/preparador/buscar_letras.py. */
+const ONLINE_LYRICS_FILENAME = 'letra-online.json';
 const LIBRARY_FILENAME = 'biblioteca.json';
 const USER_DATA_FILENAME = 'mis-datos.json';
 
@@ -160,15 +163,34 @@ export class Library {
     return Object.fromEntries(names.map((n, i) => [n, buffers[i]])) as Record<StemName, ArrayBuffer>;
   }
 
-  /** Lee la letra de una canción preparada (o null si no tiene). */
-  async readLyrics(track: Track): Promise<LyricWord[] | null> {
+  /**
+   * Lee la letra de una canción preparada. Hay dos posibles, y preferimos la 1ª:
+   *  1. letra-online.json → la de internet (buscar_letras.py), por frases con tiempo.
+   *  2. letra.json        → la de Whisper (preparar.py), palabra a palabra.
+   * Se devuelve con la forma que espera el plato: { lyricLines } o { lyrics }.
+   */
+  async readLyrics(track: Track): Promise<{ lyrics: LyricWord[] | null; lyricLines: LyricLine[] | null }> {
+    const none = { lyrics: null, lyricLines: null };
     const entry = track.stems;
-    if (!entry?.lyrics) return null;
+    if (!entry) return none;
+    const folder = `${STEMS_DIRNAME}/${entry.folder}`;
+
     try {
-      const file = await getFile(this.root, `${STEMS_DIRNAME}/${entry.folder}/${entry.lyrics}`);
-      return JSON.parse(await file.text());
+      const online = JSON.parse(await (await getFile(this.root, `${folder}/${ONLINE_LYRICS_FILENAME}`)).text());
+      // Solo nos sirve si trae tiempos: sin ellos no sabríamos dónde va cada frase.
+      if (online.encontrada && Array.isArray(online.sincronizada) && online.sincronizada.length) {
+        return { lyrics: null, lyricLines: online.sincronizada };
+      }
     } catch {
-      return null; // si falta o está mal, seguimos sin letra
+      // no hay letra de internet (o está mal): probamos con la de Whisper
+    }
+
+    if (!entry.lyrics) return none;
+    try {
+      const file = await getFile(this.root, `${folder}/${entry.lyrics}`);
+      return { lyrics: JSON.parse(await file.text()), lyricLines: null };
+    } catch {
+      return none; // si falta o está mal, seguimos sin letra
     }
   }
 

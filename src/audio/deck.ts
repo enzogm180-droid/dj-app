@@ -21,6 +21,7 @@
  */
 import { analyze, type TrackVisual } from './analysis';
 import { detectBeats } from './bpm';
+import { alignLines, type LyricLine } from './lyrics-align';
 import { loadHotCues, saveHotCues } from '../library/hotcue-store';
 import keylockUrl from './keylock-processor.ts?worker&url';
 
@@ -51,7 +52,12 @@ export interface TrackInfo {
   /** Segundo del primer golpe (rejilla de golpes). */
   beat?: number | null;
   lyrics?: LyricWord[] | null;
+  /** Letra de internet por frases (si el buscador la encontró). Tiene prioridad. */
+  lyricLines?: LyricLine[] | null;
 }
+
+/** De dónde sale la letra que vemos: de internet (escrita por personas) o de la IA (Whisper). */
+export type LyricsSource = 'internet' | 'ia';
 
 /** Cuántos hot cues tiene cada plato. */
 export const HOT_CUES = 4;
@@ -98,6 +104,8 @@ export class Deck extends EventTarget {
   visual: TrackVisual | null = null;
   /** Letra palabra a palabra (si la canción está preparada con letra). */
   lyrics: LyricWord[] | null = null;
+  /** De dónde viene esa letra (null = no hay letra). */
+  lyricsSource: LyricsSource | null = null;
 
   /** Punto CUE: dónde vuelve la canción al soltar el botón CUE (en segundos). */
   cuePoint = 0;
@@ -182,7 +190,15 @@ export class Deck extends EventTarget {
     this.bpm = grid?.bpm ?? null;
     this.firstBeat = grid?.firstBeat ?? null;
     this.visual = analyze(this.layers);
-    this.lyrics = info.lyrics ?? null;
+    // Letra: la de internet si la hay (bien escrita; colocamos sus palabras sobre
+    // el stem de voces), si no la de Whisper (palabra a palabra, pero adivinada).
+    if (info.lyricLines?.length) {
+      this.lyrics = alignLines(info.lyricLines, this.visual.peaks.vocals, this.duration);
+      this.lyricsSource = 'internet';
+    } else {
+      this.lyrics = info.lyrics?.length ? info.lyrics : null;
+      this.lyricsSource = this.lyrics ? 'ia' : null;
+    }
 
     this.emit('loaded');
   }
