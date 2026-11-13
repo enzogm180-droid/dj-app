@@ -610,6 +610,30 @@ button:disabled {
   border-bottom: 1px solid #23272d;
 }
 
+/* Cabeceras que ordenan la lista al pulsarlas: parecen texto, pero son botones. */
+.library .sort-btn {
+  all: unset;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.library .sort-btn:hover,
+.library th[aria-sort='ascending'] .sort-btn,
+.library th[aria-sort='descending'] .sort-btn {
+  color: var(--text);
+}
+
+.library .sort-btn:focus-visible {
+  outline: 2px solid var(--accent, #2bd4b4);
+  outline-offset: 2px;
+}
+
+.library .sort-arrow {
+  font-size: 10px;
+}
+
 .library tbody tr:hover {
   background: var(--panel-2);
 }

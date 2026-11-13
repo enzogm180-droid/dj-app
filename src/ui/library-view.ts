@@ -28,7 +28,12 @@ export function createLibraryView(
     </div>
     <div class="library-list">
       <table>
-        <thead><tr><th>Título</th><th>BPM</th><th>Duración</th><th>Stems</th><th><span class="sr-only">Cargar</span></th></tr></thead>
+        <thead><tr>
+          <th data-sort="title"><button class="sort-btn" data-key="title">Título<span class="sort-arrow"></span></button></th>
+          <th data-sort="bpm"><button class="sort-btn" data-key="bpm">BPM<span class="sort-arrow"></span></button></th>
+          <th data-sort="duration"><button class="sort-btn" data-key="duration">Duración<span class="sort-arrow"></span></button></th>
+          <th>Stems</th><th><span class="sr-only">Cargar</span></th>
+        </tr></thead>
         <tbody data-el="rows"></tbody>
       </table>
     </div>
@@ -42,6 +47,29 @@ export function createLibraryView(
   const rows = el<HTMLTableSectionElement>('rows');
 
   const view: { library: Library | null; refresh(): void } = { library: null, refresh: () => renderRows() };
+
+  // --- Orden de la lista ---------------------------------------------------------
+  // Clic en "Título", "BPM" o "Duración" = ordenar por esa columna.
+  // Otro clic en la misma = al revés (▲ de menor a mayor, ▼ de mayor a menor).
+  let order = loadOrder();
+  const sortButtons = root.querySelectorAll<HTMLButtonElement>('.sort-btn');
+  for (const btn of sortButtons) {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key as SortKey;
+      order = { key, dir: order.key === key ? (-order.dir as 1 | -1) : 1 };
+      saveOrder(order);
+      renderRows();
+    });
+  }
+
+  /** Marca la columna por la que ordenamos (flechita + aviso para lectores de pantalla). */
+  function showOrder(): void {
+    for (const btn of sortButtons) {
+      const active = btn.dataset.key === order.key;
+      btn.querySelector('.sort-arrow')!.textContent = active ? (order.dir === 1 ? ' ▲' : ' ▼') : '';
+      btn.parentElement!.setAttribute('aria-sort', active ? (order.dir === 1 ? 'ascending' : 'descending') : 'none');
+    }
+  }
 
   if (!supportsFolders()) {
     openBtn.disabled = true;
@@ -71,7 +99,11 @@ export function createLibraryView(
     const library = view.library;
     if (!library) return;
     const query = search.value.trim().toLowerCase();
-    const visible = library.tracks.filter((t) => `${t.title} ${t.artist} ${t.path}`.toLowerCase().includes(query));
+    const visible = sortTracks(
+      library.tracks.filter((t) => `${t.title} ${t.artist} ${t.path}`.toLowerCase().includes(query)),
+      order,
+    );
+    showOrder();
 
     rows.replaceChildren(
       ...visible.map((track) => {
@@ -125,4 +157,53 @@ export function createLibraryView(
   });
 
   return view;
+}
+
+// --- Ordenar -----------------------------------------------------------------------
+
+type SortKey = 'title' | 'bpm' | 'duration';
+/** Por qué columna ordenamos y en qué sentido (1 = de menor a mayor, −1 = al revés). */
+interface SortOrder {
+  key: SortKey;
+  dir: 1 | -1;
+}
+
+const ORDER_STORAGE_KEY = 'dj-app:orden-biblioteca';
+
+/**
+ * Devuelve una copia ordenada (no cambia la lista original).
+ * Las canciones SIN dato (p. ej. sin BPM porque aún no están preparadas) van
+ * siempre al final, ordenes como ordenes: así no tapan las que sí lo tienen.
+ * Si dos empatan (mismo BPM), se ordenan por título.
+ */
+function sortTracks(tracks: Track[], { key, dir }: SortOrder): Track[] {
+  const byTitle = (a: Track, b: Track) => a.title.localeCompare(b.title, 'es', { numeric: true });
+  return [...tracks].sort((a, b) => {
+    if (key === 'title') return dir * byTitle(a, b);
+    const va = a[key];
+    const vb = b[key];
+    if (!va && !vb) return byTitle(a, b);
+    if (!va) return 1; // sin dato → al final
+    if (!vb) return -1;
+    return dir * (va - vb) || byTitle(a, b);
+  });
+}
+
+/** El orden de la última vez (si el navegador lo guardó); si no, por título. */
+function loadOrder(): SortOrder {
+  try {
+    const saved = JSON.parse(localStorage.getItem(ORDER_STORAGE_KEY) ?? 'null');
+    if (['title', 'bpm', 'duration'].includes(saved?.key) && (saved.dir === 1 || saved.dir === -1)) return saved;
+  } catch {
+    // almacenamiento bloqueado o dato estropeado: usamos el orden por defecto
+  }
+  return { key: 'title', dir: 1 };
+}
+
+function saveOrder(order: SortOrder): void {
+  try {
+    localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(order));
+  } catch {
+    // sin almacenamiento: simplemente no se recuerda para la próxima vez
+  }
 }
