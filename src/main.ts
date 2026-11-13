@@ -17,6 +17,7 @@ import { createLibraryView } from './ui/library-view';
 import { createMidiView } from './ui/midi-view';
 import { simulateMidi } from './midi/midi';
 import { createMixerView } from './ui/mixer-view';
+import { updateFaderFills } from './ui/fader-fill';
 import { ScrollingWave } from './ui/scrolling-wave';
 
 const app = document.querySelector<HTMLElement>('#app')!;
@@ -148,6 +149,7 @@ function frame(): void {
   viewB.render();
   laneA.draw();
   laneB.draw();
+  updateFaderFills(); // relleno de color de los faders, hasta su tapa
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

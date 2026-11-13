@@ -44,7 +44,7 @@ export function drawHotCues(
     g.fillRect(x - ratio / 2, top, ratio, bottom - top);
     const size = 11 * ratio;
     g.fillRect(x, top, size, size);
-    g.fillStyle = '#0d0f12';
+    g.fillStyle = '#05070b';
     g.fillText(String(i + 1), x + size / 2, top + size / 2 + ratio / 2);
   });
   g.textAlign = 'start';
