@@ -18,6 +18,14 @@ import type { Deck } from '../audio/deck';
 const SECONDS_PER_TURN = 60 / (100 / 3);
 /** Lo más que acelera o frena al girar sonando (±10 %). */
 const MAX_BEND = 0.1;
+/**
+ * Plato de la CONTROLADORA: cuántos "clics" manda en una vuelta entera.
+ * (En la DDJ-FLX4 deberían ser unos 720; si al girar una vuelta la canción
+ * se mueve mucho más o menos de 1,8 s, se ajusta aquí).
+ */
+const MIDI_TICKS_PER_TURN = 720;
+/** Cuánto empuja cada clic del plato de la controladora con la canción sonando (0,8 % por clic). */
+const MIDI_BEND_PER_TICK = 0.008;
 
 export class Jog {
   private readonly canvas: HTMLCanvasElement;
@@ -101,6 +109,34 @@ export class Jog {
     };
     this.canvas.addEventListener('pointerup', end);
     this.canvas.addEventListener('pointercancel', end);
+  }
+
+  // --- Plato de la controladora (MIDI) ------------------------------------------
+  private midiRelease: ReturnType<typeof setTimeout> | null = null;
+
+  /** La controladora avisa de que has puesto (true) o quitado (false) la mano encima del plato. */
+  midiTouch(on: boolean): void {
+    this.touching = on;
+    if (!on) {
+      if (this.midiRelease) clearTimeout(this.midiRelease);
+      this.deck.endBend(); // al soltar, vuelve a su tempo
+    }
+  }
+
+  /**
+   * La controladora avisa de que el plato ha girado `ticks` clics (+ adelante, − atrás).
+   * Hace lo mismo que con el ratón: parado = mover la canción; sonando = empujar o frenar.
+   */
+  midiTurn(ticks: number): void {
+    if (!this.deck.loaded || ticks === 0) return;
+    if (!this.deck.isPlaying) {
+      void this.deck.seek(this.deck.position + (ticks / MIDI_TICKS_PER_TURN) * SECONDS_PER_TURN);
+      return;
+    }
+    this.deck.bend(Math.max(-MAX_BEND, Math.min(MAX_BEND, ticks * MIDI_BEND_PER_TICK)));
+    // Cuando dejas de girar (no llegan más clics), vuelve a su tempo.
+    if (this.midiRelease) clearTimeout(this.midiRelease);
+    this.midiRelease = setTimeout(() => this.deck.endBend(), 100);
   }
 
   draw(): void {

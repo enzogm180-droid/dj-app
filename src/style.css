@@ -634,6 +634,12 @@ button:disabled {
   font-size: 10px;
 }
 
+/* Canción elegida con la rueda del navegador de la controladora (la que carga LOAD). */
+.library tbody tr.selected {
+  background: var(--panel-2);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
 .library tbody tr:hover {
   background: var(--panel-2);
 }
@@ -1533,4 +1539,52 @@ button:disabled {
   .loop-btn {
     min-width: 56px;
   }
+}
+
+/* --- CONTROLADORA MIDI ----------------------------------------------------------- */
+/* Botón "MIDI" al lado de la asistencia de golpe. */
+.topbar .assist {
+  margin-right: 0;
+}
+
+.topbar .midi-btn {
+  margin-left: 8px;
+  margin-right: auto;
+}
+
+.midi-btn.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Monitor MIDI: lo que manda la mesa y a qué control va. */
+.midi-panel {
+  background: var(--panel);
+  border: 1px solid #353a42;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: -8px 0 12px;
+  font-size: 12px;
+}
+
+.midi-status {
+  font-weight: 600;
+}
+
+.midi-help {
+  margin: 4px 0;
+  color: var(--muted);
+}
+
+.midi-log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: ui-monospace, Consolas, monospace;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.midi-log li.unmapped {
+  color: var(--cue);
 }

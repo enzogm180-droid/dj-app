@@ -46,6 +46,11 @@ export interface Knob {
   readonly value: number;
   /** Cambia el valor. `silent` = sin avisar (cuando el cambio viene de fuera). */
   set(value: number, silent?: boolean): void;
+  /**
+   * Coloca la rueda por su POSICIÓN: 0 = tope izquierdo, 0,5 = arriba (centro),
+   * 1 = tope derecho. Es lo que manda una rueda de verdad de la controladora.
+   */
+  setPosition(position: number): void;
 }
 
 const START = -135; // grados: dónde empieza el recorrido (abajo a la izquierda)
@@ -183,5 +188,6 @@ export function createKnob(o: KnobOptions): Knob {
       return value;
     },
     set,
+    setPosition: (position) => set(valueAt(position)),
   };
 }
