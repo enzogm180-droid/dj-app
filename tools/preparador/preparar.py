@@ -131,10 +131,24 @@ def save_library(library: dict, path: Path) -> None:
     os.replace(tmp, path)
 
 
+def is_hidden(p: Path, music_dir: Path) -> bool:
+    """¿Es un archivo/carpeta oculto que NO es música de verdad?
+
+    - "._canción.mp3": "sombra" que crea un Mac al copiar a un USB o disco.
+      Pesa unos KB, solo guarda datos del Mac (carátula, etiquetas) y no es audio.
+    - Cualquier cosa que empiece por "." (".Trashes", ".Spotlight-V100"…):
+      carpetas internas del sistema. La app hace lo mismo al leer la carpeta.
+    """
+    return any(part.startswith(".") for part in p.relative_to(music_dir).parts)
+
+
 def find_songs(music_dir: Path, stems_dir: Path) -> list[Path]:
     songs = [
         p for p in music_dir.rglob("*")
-        if p.is_file() and p.suffix.lower() in AUDIO_EXTENSIONS and stems_dir not in p.parents
+        if p.is_file()
+        and p.suffix.lower() in AUDIO_EXTENSIONS
+        and stems_dir not in p.parents
+        and not is_hidden(p, music_dir)  # salta las "sombras" ._ del Mac
     ]
     return sorted(songs, key=lambda p: str(p).lower())
 
