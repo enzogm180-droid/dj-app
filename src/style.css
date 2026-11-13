@@ -1,21 +1,53 @@
-/* Colores en un solo sitio: si quieres cambiar el aspecto, empieza por aquí. */
+/* ==================================================================================
+ * PALETA "CLUB NOCTURNO"
+ * Colores en un solo sitio: si quieres cambiar el aspecto, empieza por aquí.
+ *
+ *   Fondo negro azulado · plato A en CIAN · plato B en MAGENTA
+ *   PLAY verde neón · CUE ámbar · SYNC violeta · peligro/quitar en rojo coral
+ *
+ * Truco: cada plato (y su canal del mixer) redefine --accent con SU color
+ * (ver "ESTÉTICA" al final), así todo lo de dentro se tiñe solo.
+ * ================================================================================== */
 :root {
-  --bg: #121417;
-  --panel: #1c1f24;
-  --panel-2: #262a31;
-  --text: #e9ecef;
-  --muted: #8b939c;
-  --accent: #2ec4b6;
+  /* Fondos, de más oscuro a más claro */
+  --bg: #07090d;
+  --panel: #0f131b;
+  --panel-2: #161b26;
+  --panel-3: #1e2433;
+  --well: #05070b; /* "huecos" hundidos: ondas, pantallas, buscador */
+  --line: #232a3a; /* bordes */
+  --line-soft: #181d29;
+
+  /* Textos */
+  --text: #e6ebf4;
+  --muted: #7b8598;
+
+  /* Colores de cada plato */
+  --deck-a: #22d3ee;
+  --deck-b: #f472b6;
+  --accent: var(--deck-a);
+
+  /* Botones con significado */
+  --play: #4ade80;
+  --cue: #fbbf24;
+  --sync: #a78bfa;
+  --danger: #fb7185;
+
   --playhead: #ffffff;
-  --cue: #f5a524;
   /* Colores de cada stem en las ondas. */
-  --stem-vocals: #b48cff;
-  --stem-other: #2ec4b6;
-  --stem-drums: #c9d1d9;
-  --stem-bass: #e5484d;
-  --wave-main: #5f9ea0; /* canción sin stems */
-  --bass-mark: #ff6b3d; /* rectangulitos de cada boom */
-  --loop: #4ade80; /* zona del loop */
+  --stem-vocals: #c084fc;
+  --stem-other: #38bdf8;
+  --stem-drums: #e2e8f0;
+  --stem-bass: #fb7185;
+  --wave-main: #5eead4; /* canción sin stems */
+  --bass-mark: #fb923c; /* rectangulitos de cada boom */
+  --loop: #34d399; /* zona del loop */
+
+  /* Letras: Bahnschrift viene con Windows (estilo de pantalla de equipo de DJ).
+     Nada de fuentes de internet: la app tiene que funcionar sin conexión. */
+  --font-ui: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-display: Bahnschrift, 'DIN Alternate', 'Segoe UI', system-ui, sans-serif;
+
   color-scheme: dark;
 }
 
@@ -632,6 +664,12 @@ button:disabled {
 
 .library .sort-arrow {
   font-size: 10px;
+}
+
+/* Canción elegida con la rueda del navegador de la controladora (la que carga LOAD). */
+.library tbody tr.selected {
+  background: var(--panel-2);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .library tbody tr:hover {
@@ -1533,4 +1571,814 @@ button:disabled {
   .loop-btn {
     min-width: 56px;
   }
+}
+
+/* --- CONTROLADORA MIDI ----------------------------------------------------------- */
+/* Botón "MIDI" al lado de la asistencia de golpe. */
+.topbar .assist {
+  margin-right: 0;
+}
+
+.topbar .midi-btn {
+  margin-left: 8px;
+  margin-right: auto;
+}
+
+.midi-btn.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Monitor MIDI: lo que manda la mesa y a qué control va. */
+.midi-panel {
+  background: var(--panel);
+  border: 1px solid #353a42;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: -8px 0 12px;
+  font-size: 12px;
+}
+
+.midi-status {
+  font-weight: 600;
+}
+
+.midi-help {
+  margin: 4px 0;
+  color: var(--muted);
+}
+
+.midi-log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: ui-monospace, Consolas, monospace;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.midi-log li.unmapped {
+  color: var(--cue);
+}
+
+/* ==================================================================================
+ * ESTÉTICA "CLUB NOCTURNO" (acabados)
+ * Lo de arriba coloca cada cosa y le da su TAMAÑO; esta parte final le da el
+ * ACABADO: relieve de los botones, brillos al encenderse, paneles, faders…
+ * Va al final para que mande sobre lo anterior.
+ * ================================================================================== */
+
+/* --- Cada plato con su color ------------------------------------------------------ */
+.deck-a,
+.strip-a,
+.lane:nth-child(1) {
+  --accent: var(--deck-a);
+}
+
+.deck-b,
+.strip-b,
+.lane:nth-child(2) {
+  --accent: var(--deck-b);
+}
+
+/* --- Base ------------------------------------------------------------------------ */
+body {
+  font-family: var(--font-ui);
+  /* Dos focos de luz muy suaves, cian a la izquierda y magenta a la derecha. */
+  background:
+    radial-gradient(900px 500px at 12% -8%, rgb(34 211 238 / 0.08), transparent 70%),
+    radial-gradient(900px 500px at 88% -8%, rgb(244 114 182 / 0.08), transparent 70%),
+    var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgb(34 211 238 / 0.35);
+}
+
+/* Barras de desplazamiento finas y oscuras */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--panel-3) transparent;
+}
+
+/* Foco del teclado: un anillo del color del plato (no se ve al usar el ratón). */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* --- Paneles: platos, mixer, ondas, lista -------------------------------------- */
+.deck,
+.mixer,
+.lanes,
+.library,
+.midi-panel {
+  background: linear-gradient(180deg, #121722 0%, var(--panel) 60%);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.04),
+    0 12px 32px -14px rgb(0 0 0 / 0.8);
+}
+
+/* Platos: una línea de su color arriba, como una luz de ambiente. */
+.deck {
+  position: relative;
+  isolation: isolate; /* las luces de ::before/::after quedan DETRÁS del contenido */
+}
+
+.deck::before,
+.deck::after {
+  z-index: -1;
+  border-radius: 12px 12px 0 0;
+}
+
+.deck::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.85;
+}
+
+.deck::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 60px;
+  background: radial-gradient(60% 100% at 50% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent);
+  pointer-events: none;
+}
+
+/* --- Barra de arriba ------------------------------------------------------------ */
+.topbar h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: linear-gradient(90deg, var(--deck-a), var(--deck-b));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.hint {
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+.topbar .assist,
+.topbar .midi-btn {
+  border-radius: 999px;
+  padding: 3px 12px;
+}
+
+/* --- Botones: relieve suave, se "hunden" al pulsar ------------------------------ */
+.load,
+button {
+  font-family: var(--font-display);
+  letter-spacing: 0.03em;
+  background: linear-gradient(180deg, #1d2331 0%, #151a25 100%);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--text);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 1px 2px rgb(0 0 0 / 0.6);
+  transition:
+    background 120ms,
+    border-color 120ms,
+    box-shadow 160ms,
+    color 120ms,
+    transform 60ms;
+}
+
+.load:hover,
+button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: linear-gradient(180deg, #222a3a 0%, #181e2b 100%);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.5);
+}
+
+button:disabled {
+  opacity: 0.35;
+}
+
+/* "Encendido" genérico: teñido del color, borde brillante y un halo. */
+.assist[aria-pressed='true'],
+.midi-btn.on,
+.mode button[aria-pressed='true'],
+.pad-tabs button[aria-pressed='true'],
+.fx-row.on .fx-on {
+  color: color-mix(in srgb, var(--accent) 80%, white);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 28%, #151a25), color-mix(in srgb, var(--accent) 14%, #11151e));
+  border-color: var(--accent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.1),
+    0 0 12px -2px color-mix(in srgb, var(--accent) 70%, transparent);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+/* --- Cabecera del plato ----------------------------------------------------------- */
+.deck-letter {
+  font-family: var(--font-display);
+  color: #04131a;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 70%, white), var(--accent));
+  border-radius: 7px;
+  box-shadow: 0 0 14px -2px color-mix(in srgb, var(--accent) 80%, transparent);
+}
+
+.badge {
+  font-family: var(--font-display);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: color-mix(in srgb, var(--accent) 85%, white);
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: 999px;
+  padding: 0 7px;
+}
+
+.bpm,
+.track-time,
+.tempo output,
+.knob-output,
+.library .num {
+  font-family: var(--font-display);
+}
+
+.bpm.changed {
+  color: var(--accent);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+/* --- Huecos hundidos: ondas y pantallas ----------------------------------------- */
+.wave,
+.lane canvas {
+  background: var(--well);
+  border: 1px solid var(--line-soft);
+  box-shadow: inset 0 2px 8px rgb(0 0 0 / 0.7);
+}
+
+.lane-letter {
+  font-family: var(--font-display);
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel-2));
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 6px;
+}
+
+/* --- Transporte: CUE · PLAY · SYNC ---------------------------------------------- */
+.play {
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--play) 45%, var(--line));
+  color: var(--play);
+  background: radial-gradient(circle at 50% 35%, #1f2738, #10141c 75%);
+}
+
+.play.on {
+  color: #04140a;
+  border-color: var(--play);
+  background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--play) 75%, white), var(--play) 70%);
+  box-shadow:
+    0 0 18px -2px color-mix(in srgb, var(--play) 85%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 0.4);
+}
+
+.cue,
+.sync {
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.cue {
+  color: var(--cue);
+  border-color: color-mix(in srgb, var(--cue) 50%, var(--line));
+}
+
+.cue.on {
+  color: #1a1203;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cue) 80%, white), var(--cue));
+  border-color: var(--cue);
+  box-shadow: 0 0 16px -2px color-mix(in srgb, var(--cue) 85%, transparent);
+}
+
+.sync {
+  color: var(--sync);
+  border-color: color-mix(in srgb, var(--sync) 50%, var(--line));
+}
+
+.sync.on {
+  color: #120a24;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--sync) 80%, white), var(--sync));
+  border-color: var(--sync);
+  box-shadow: 0 0 16px -2px color-mix(in srgb, var(--sync) 85%, transparent);
+}
+
+.sync.gliding {
+  border-color: var(--sync);
+  animation: sync-pulse 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes sync-pulse {
+  from {
+    box-shadow: 0 0 0 rgb(0 0 0 / 0);
+  }
+  to {
+    box-shadow: 0 0 16px -2px color-mix(in srgb, var(--sync) 85%, transparent);
+    background: color-mix(in srgb, var(--sync) 20%, #151a25);
+  }
+}
+
+/* --- Pads: como gomas de una controladora --------------------------------------- */
+.pad {
+  --pad: var(--accent);
+  border-radius: 8px;
+  color: color-mix(in srgb, var(--pad) 85%, white);
+  background: linear-gradient(180deg, #19202d, #121722);
+  border: 1px solid color-mix(in srgb, var(--pad) 30%, var(--line));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    inset 0 -2px 0 rgb(0 0 0 / 0.35);
+}
+
+/* Cada pad de stem con el color de SU stem (el mismo que en las ondas). */
+.pad[data-stem='vocals'] {
+  --pad: var(--stem-vocals);
+}
+
+.pad[data-stem='other'] {
+  --pad: var(--stem-other);
+}
+
+.pad[data-stem='bass'] {
+  --pad: var(--stem-bass);
+}
+
+.pad[data-stem='drums'] {
+  --pad: var(--stem-drums);
+}
+
+/* Stem sonando: el pad se ilumina con su color. */
+.pad[data-stem][aria-pressed='true'] {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--pad) 30%, #19202d), color-mix(in srgb, var(--pad) 16%, #121722));
+  border-color: color-mix(in srgb, var(--pad) 80%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.1),
+    0 0 12px -3px color-mix(in srgb, var(--pad) 80%, transparent);
+}
+
+/* Stem quitado: apagado, con el nombre tachado en rojo. */
+.pad.muted {
+  color: color-mix(in srgb, var(--danger) 80%, white);
+  background: linear-gradient(180deg, #1a1218, #130e13);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--danger) 60%, transparent);
+}
+
+.pad:disabled {
+  background: var(--panel-2);
+  border-color: var(--line);
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.mode-pad {
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.mode-pad.active {
+  color: color-mix(in srgb, var(--accent) 85%, white);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 30%, #19202d), color-mix(in srgb, var(--accent) 16%, #121722));
+  border-color: var(--accent);
+  box-shadow: 0 0 12px -3px color-mix(in srgb, var(--accent) 80%, transparent);
+}
+
+/* Hot cues */
+.pad.hotcue {
+  --pad: var(--hc);
+  color: var(--hc);
+}
+
+.pad.hotcue.set {
+  color: #0b0d12;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--hc) 75%, white), var(--hc));
+  border-color: var(--hc);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.35),
+    0 0 12px -3px var(--hc);
+}
+
+.pad.hotcue-delete {
+  --pad: var(--muted);
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.pad.hotcue-delete:not(:disabled):hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* Pestañas segmentadas (STEMS/HOT CUES, EQ/STEMS, L.AJUST/L.PERS) */
+.pad-tabs,
+.mode,
+.loop-tabs {
+  padding: 2px;
+  background: var(--well);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  gap: 2px;
+}
+
+.pad-tabs button,
+.mode button,
+.loop-tabs button {
+  border: 1px solid transparent;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 6px !important;
+  color: var(--muted);
+}
+
+.pad-tabs button:hover:not(:disabled),
+.mode button:hover:not(:disabled),
+.loop-tabs button:hover:not(:disabled) {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.loop-tabs button[aria-pressed='true'] {
+  color: #03140d;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--loop) 80%, white), var(--loop));
+  border-color: var(--loop);
+  box-shadow: 0 0 10px -2px color-mix(in srgb, var(--loop) 80%, transparent);
+}
+
+/* --- Loops ------------------------------------------------------------------------ */
+.loops {
+  border-top: 1px solid var(--line-soft);
+}
+
+.loop-row button.on {
+  color: #03140d;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--loop) 80%, white), var(--loop));
+  border-color: var(--loop);
+  box-shadow: 0 0 12px -2px color-mix(in srgb, var(--loop) 85%, transparent);
+}
+
+/* --- Efectos ---------------------------------------------------------------------- */
+.fx select {
+  appearance: none;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237b8598' stroke-width='1.5'/%3E%3C/svg%3E")
+      no-repeat right 7px center,
+    linear-gradient(180deg, #19202d, #121722);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 3px 22px 3px 8px;
+  font-family: var(--font-display);
+  cursor: pointer;
+}
+
+.fx select:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+
+.fx select option {
+  background: var(--panel-2);
+}
+
+/* --- Faders (deslizadores) a medida ----------------------------------------------- */
+/*
+ * Cada fader es:   ranura hundida  +  RELLENO de color hasta la tapa  +  tapa metálica
+ *
+ *     horizontal:   ███████████▌[▮]░░░░░░░░░      vertical:  ░
+ *                   relleno        tapa  ranura              [▮] ← tapa
+ *                                                            █
+ *                                                            █ ← relleno
+ *
+ * La ranura y el relleno se pintan en el FONDO del propio fader; la "pista"
+ * del navegador queda invisible y del mismo tamaño que el fader, así la tapa
+ * siempre va centrada y nunca se sale (antes, en los verticales, se salía).
+ *
+ * Dónde está la tapa lo dice la variable --p (de 0 a 1), que pone
+ * src/ui/fader-fill.ts. El tempo rellena desde el CENTRO (0 %) hasta la tapa:
+ * para eso usa --a y --b (inicio y fin del relleno).
+ * El color del relleno es --fill (por defecto, el del plato).
+ */
+input[type='range'] {
+  --p: 0.5;
+  --a: -0.05; /* por debajo de 0: el relleno empieza en el borde */
+  --b: var(--p);
+  --fill: var(--accent);
+  --thumb: 12px; /* lo que mide la tapa a lo largo del fader */
+  --groove: 3px; /* grosor de la ranura */
+  /* Posición (en el fader) de un valor de 0 a 1, contando con que la tapa ocupa sitio. */
+  --at-a: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--a));
+  --at-b: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--b));
+  -webkit-appearance: none;
+  appearance: none;
+  height: 20px;
+  margin: 0;
+  cursor: pointer;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+        to right,
+        var(--well) var(--at-a),
+        var(--fill) var(--at-a),
+        var(--fill) var(--at-b),
+        var(--well) var(--at-b)
+      )
+      center / 100% var(--groove) no-repeat;
+}
+
+/* Un poquito de brillo en el relleno (como una tira de LEDs). */
+input[type='range']:not(:disabled) {
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--fill) 35%, transparent));
+}
+
+input[type='range']::-webkit-slider-runnable-track {
+  height: 100%;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--thumb);
+  height: 100%;
+  margin: 0;
+  border-radius: 3px;
+  border: 1px solid #0a0d13;
+  background:
+    linear-gradient(90deg, transparent 45%, var(--fill) 45%, var(--fill) 55%, transparent 55%),
+    linear-gradient(180deg, #eef2f8, #8e98aa);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.75);
+}
+
+/* --- Faders VERTICALES (volumen de canal y tempo) ---------------------------------- */
+input.fader,
+.tempo input[type='range'] {
+  --thumb: 14px;
+  width: 24px !important;
+  height: auto;
+  background:
+    linear-gradient(
+        to top,
+        var(--well) var(--at-a),
+        var(--fill) var(--at-a),
+        var(--fill) var(--at-b),
+        var(--well) var(--at-b)
+      )
+      center / var(--groove) 100% no-repeat;
+}
+
+input.fader::-webkit-slider-runnable-track,
+.tempo input[type='range']::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 100%;
+}
+
+input.fader::-webkit-slider-thumb,
+.tempo input[type='range']::-webkit-slider-thumb {
+  width: 100%;
+  height: var(--thumb);
+  background:
+    linear-gradient(180deg, transparent 45%, var(--fill) 45%, var(--fill) 55%, transparent 55%),
+    linear-gradient(90deg, #8e98aa, #eef2f8 50%, #8e98aa);
+}
+
+/* Tempo: el relleno va del CENTRO (0 %) a la tapa, y una RAYA en el medio marca el 0. */
+.tempo input[type='range'] {
+  background:
+    /* raya del 0 %: más ancha que la ranura, para que se vea a los lados */
+    linear-gradient(
+        to top,
+        transparent calc(50% - 0.5px),
+        color-mix(in srgb, var(--text) 75%, transparent) calc(50% - 0.5px),
+        color-mix(in srgb, var(--text) 75%, transparent) calc(50% + 0.5px),
+        transparent calc(50% + 0.5px)
+      )
+      center / 16px 100% no-repeat,
+    linear-gradient(
+        to top,
+        var(--well) var(--at-a),
+        var(--fill) var(--at-a),
+        var(--fill) var(--at-b),
+        var(--well) var(--at-b)
+      )
+      center / var(--groove) 100% no-repeat;
+}
+
+/* --- Master: color propio, el "general" (mezcla del color de los dos platos) ---- */
+.master input[type='range'] {
+  --fill: #c084fc;
+  background:
+    linear-gradient(to right, transparent var(--at-b), var(--well) var(--at-b)) center / 100% var(--groove) no-repeat,
+    linear-gradient(to right, var(--deck-a), #a78bfa 50%, var(--deck-b)) center / 100% var(--groove) no-repeat;
+}
+
+/* --- Crossfader: cian a la izquierda de la tapa (plato A), magenta a la derecha (B) --- */
+.xfader input[type='range'] {
+  --thumb: 16px;
+  --groove: 4px;
+  height: 24px;
+  background:
+    linear-gradient(to right, var(--deck-a) var(--at-b), var(--deck-b) var(--at-b)) center / 100% var(--groove)
+    no-repeat;
+  filter: none;
+}
+
+.xfader input[type='range']::-webkit-slider-thumb {
+  background:
+    linear-gradient(90deg, transparent 45%, #fff 45%, #fff 55%, transparent 55%),
+    linear-gradient(180deg, #eef2f8, #8e98aa);
+  box-shadow:
+    0 2px 5px rgb(0 0 0 / 0.8),
+    0 0 10px -2px rgb(255 255 255 / 0.35);
+}
+
+/* Efectos: faders pequeños */
+.fx input[type='range'] {
+  --thumb: 10px;
+  --groove: 3px;
+  height: 16px;
+}
+
+.xfader span {
+  font-family: var(--font-display);
+}
+
+.xfader span:first-child {
+  color: var(--deck-a);
+}
+
+.xfader span:last-child {
+  color: var(--deck-b);
+}
+
+.xfader {
+  border-top: 1px solid var(--line-soft);
+}
+
+.tempo output {
+  color: var(--accent);
+}
+
+/* --- Mixer ------------------------------------------------------------------------ */
+.mixer {
+  /* Panel central un poco más oscuro, como una mesa de metal. */
+  background: linear-gradient(180deg, #10141d, #0b0e15);
+}
+
+.strip-letter {
+  font-family: var(--font-display);
+  color: var(--accent);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.gain-module {
+  background: var(--well);
+  border: 1px solid var(--line-soft);
+  box-shadow: inset 0 1px 4px rgb(0 0 0 / 0.6);
+}
+
+/* --- Ruedas (knobs) ----------------------------------------------------------------- */
+.knob-dial svg {
+  overflow: visible;
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.7));
+}
+
+.knob-body {
+  fill: #1c2230;
+  stroke: #080a0f;
+}
+
+.knob-dial:hover .knob-body,
+.knob-dial.dragging .knob-body {
+  fill: #252d3f;
+}
+
+.knob-track {
+  stroke: #1f2534;
+}
+
+.knob-value {
+  stroke: var(--accent);
+  filter: drop-shadow(0 0 2px var(--accent));
+}
+
+.gain-module .knob-value {
+  stroke: var(--cue);
+  filter: drop-shadow(0 0 2px var(--cue));
+}
+
+.knob-pointer {
+  stroke: #ffffff;
+}
+
+.knob.killed .knob-value,
+.knob.killed .knob-pointer {
+  stroke: var(--danger);
+  filter: drop-shadow(0 0 3px var(--danger));
+}
+
+.knob.killed .knob-output {
+  color: var(--danger);
+}
+
+.knob-label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 9px;
+}
+
+/* --- Plato vinilo --------------------------------------------------------------- */
+.jog {
+  filter: drop-shadow(0 6px 14px rgb(0 0 0 / 0.7));
+}
+
+/* --- Biblioteca (lista de canciones) ------------------------------------------- */
+.library-bar input[type='search'] {
+  background: var(--well);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 14px;
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.6);
+  transition:
+    border-color 120ms,
+    box-shadow 120ms;
+}
+
+.library-bar input[type='search']:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow:
+    inset 0 1px 3px rgb(0 0 0 / 0.6),
+    0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.library th {
+  background: #10141d;
+  border-bottom: 1px solid var(--line);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-family: var(--font-display);
+  font-size: 11px;
+}
+
+.library td {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.library tbody tr:hover {
+  background: rgb(255 255 255 / 0.03);
+}
+
+.library tbody tr.selected {
+  background: linear-gradient(90deg, rgb(34 211 238 / 0.12), transparent 70%);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.library .bpm-cell {
+  color: var(--text);
+}
+
+/* Botones A y B de cada canción, cada uno del color de su plato. */
+.load-buttons [data-deck='A'] {
+  --accent: var(--deck-a);
+}
+
+.load-buttons [data-deck='B'] {
+  --accent: var(--deck-b);
+}
+
+.load-buttons button {
+  color: var(--accent);
+  border-radius: 999px;
+  min-width: 34px;
+}
+
+.load-buttons button:hover:not(:disabled) {
+  color: #0b0d12;
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 10px -2px var(--accent);
+}
+
+/* --- Monitor MIDI -------------------------------------------------------------- */
+.midi-log li {
+  padding: 1px 0;
+  color: color-mix(in srgb, var(--accent) 70%, var(--text));
 }

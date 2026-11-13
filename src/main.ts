@@ -14,7 +14,10 @@ import { FxRack } from './audio/fx';
 import { Mixer } from './audio/mixer';
 import { createDeckView, deckSettings, type DeckView } from './ui/deck-view';
 import { createLibraryView } from './ui/library-view';
+import { createMidiView } from './ui/midi-view';
+import { simulateMidi } from './midi/midi';
 import { createMixerView } from './ui/mixer-view';
+import { updateFaderFills } from './ui/fader-fill';
 import { ScrollingWave } from './ui/scrolling-wave';
 
 const app = document.querySelector<HTMLElement>('#app')!;
@@ -25,8 +28,10 @@ app.innerHTML = `
       title="Al dar PLAY con la otra canción sonando, arranca justo en su golpe. SYNC también cuadra los golpes.">
       Asistencia de golpe: ON
     </button>
+    <button class="assist midi-btn" id="midi" title="Conectar la controladora (y abrir/cerrar el monitor MIDI)">MIDI</button>
     <span class="hint">A: Q play · W cue — B: P play · O cue — doble clic en un control = valor inicial</span>
   </header>
+  <section id="midi-panel" aria-label="Monitor MIDI"></section>
   <section class="lanes" aria-label="Ondas de los dos platos">
     <div class="lane"><span class="lane-letter">A</span><canvas id="lane-a"></canvas></div>
     <div class="lane"><span class="lane-letter">B</span><canvas id="lane-b"></canvas></div>
@@ -97,7 +102,8 @@ createMixerView(document.getElementById('mixer')!, mixer, deckA, deckB);
 
 // Solo mientras desarrollamos (npm run dev): deja los platos a mano en la
 // consola del navegador (window.__dj) para poder hacer pruebas y medir.
-if (import.meta.env.DEV) Object.assign(window, { __dj: { deckA, deckB, mixer } });
+// simulateMidi([0x90, 0x0B, 0x7F]) hace como si la controladora pulsara PLAY del plato A.
+if (import.meta.env.DEV) Object.assign(window, { __dj: { deckA, deckB, mixer, simulateMidi } });
 
 // Botón de asistencia de golpe (afecta a los dos platos).
 const assistBtn = document.getElementById('assist') as HTMLButtonElement;
@@ -106,6 +112,9 @@ assistBtn.addEventListener('click', () => {
   assistBtn.setAttribute('aria-pressed', String(deckSettings.assist));
   assistBtn.textContent = `Asistencia de golpe: ${deckSettings.assist ? 'ON' : 'OFF'}`;
 });
+
+// Controladora MIDI (botón "MIDI" de arriba + monitor).
+createMidiView(document.getElementById('midi') as HTMLButtonElement, document.getElementById('midi-panel')!);
 
 // Ondas grandes que avanzan con la canción (arriba del todo).
 const laneA = new ScrollingWave(document.getElementById('lane-a') as HTMLCanvasElement, deckA);
@@ -140,6 +149,7 @@ function frame(): void {
   viewB.render();
   laneA.draw();
   laneB.draw();
+  updateFaderFills(); // relleno de color de los faders, hasta su tapa
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

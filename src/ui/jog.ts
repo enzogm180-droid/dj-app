@@ -18,6 +18,14 @@ import type { Deck } from '../audio/deck';
 const SECONDS_PER_TURN = 60 / (100 / 3);
 /** Lo más que acelera o frena al girar sonando (±10 %). */
 const MAX_BEND = 0.1;
+/**
+ * Plato de la CONTROLADORA: cuántos "clics" manda en una vuelta entera.
+ * (En la DDJ-FLX4 deberían ser unos 720; si al girar una vuelta la canción
+ * se mueve mucho más o menos de 1,8 s, se ajusta aquí).
+ */
+const MIDI_TICKS_PER_TURN = 720;
+/** Cuánto empuja cada clic del plato de la controladora con la canción sonando (0,8 % por clic). */
+const MIDI_BEND_PER_TICK = 0.008;
 
 export class Jog {
   private readonly canvas: HTMLCanvasElement;
@@ -103,6 +111,34 @@ export class Jog {
     this.canvas.addEventListener('pointercancel', end);
   }
 
+  // --- Plato de la controladora (MIDI) ------------------------------------------
+  private midiRelease: ReturnType<typeof setTimeout> | null = null;
+
+  /** La controladora avisa de que has puesto (true) o quitado (false) la mano encima del plato. */
+  midiTouch(on: boolean): void {
+    this.touching = on;
+    if (!on) {
+      if (this.midiRelease) clearTimeout(this.midiRelease);
+      this.deck.endBend(); // al soltar, vuelve a su tempo
+    }
+  }
+
+  /**
+   * La controladora avisa de que el plato ha girado `ticks` clics (+ adelante, − atrás).
+   * Hace lo mismo que con el ratón: parado = mover la canción; sonando = empujar o frenar.
+   */
+  midiTurn(ticks: number): void {
+    if (!this.deck.loaded || ticks === 0) return;
+    if (!this.deck.isPlaying) {
+      void this.deck.seek(this.deck.position + (ticks / MIDI_TICKS_PER_TURN) * SECONDS_PER_TURN);
+      return;
+    }
+    this.deck.bend(Math.max(-MAX_BEND, Math.min(MAX_BEND, ticks * MIDI_BEND_PER_TICK)));
+    // Cuando dejas de girar (no llegan más clics), vuelve a su tempo.
+    if (this.midiRelease) clearTimeout(this.midiRelease);
+    this.midiRelease = setTimeout(() => this.deck.endBend(), 100);
+  }
+
   draw(): void {
     const { width, height } = this.canvas;
     const g = this.g;
@@ -116,53 +152,105 @@ export class Jog {
     const disc = R - ring - 3 * ratio;
     const top = -Math.PI / 2;
 
-    // Anillo de fuera: fondo y lo ya escuchado.
+    const accent = css.getPropertyValue('--accent').trim();
+    const turn = top + ((this.deck.position / SECONDS_PER_TURN) % 1) * Math.PI * 2;
+
+    // Anillo de fuera: ranura oscura y, encima, lo ya escuchado en el color del
+    // plato, con un poco de brillo (como un anillo de LEDs).
     g.lineWidth = ring;
-    g.strokeStyle = '#2a2f36';
+    g.strokeStyle = css.getPropertyValue('--well');
     g.beginPath();
     g.arc(cx, cy, R - ring / 2, 0, Math.PI * 2);
     g.stroke();
     const duration = this.deck.duration;
     if (duration > 0) {
-      g.strokeStyle = css.getPropertyValue('--accent');
+      g.save();
+      g.strokeStyle = accent;
+      g.shadowColor = accent;
+      g.shadowBlur = 8 * ratio;
+      g.lineCap = 'round';
       g.beginPath();
-      g.arc(cx, cy, R - ring / 2, top, top + (this.deck.position / duration) * Math.PI * 2);
+      g.arc(cx, cy, R - ring / 2, top, top + Math.max(0.001, this.deck.position / duration) * Math.PI * 2);
       g.stroke();
+      g.restore();
       // Punto CUE en el anillo.
       const cueAngle = top + (this.deck.cuePoint / duration) * Math.PI * 2;
+      g.save();
       g.fillStyle = css.getPropertyValue('--cue');
+      g.shadowColor = g.fillStyle;
+      g.shadowBlur = 6 * ratio;
       g.beginPath();
       g.arc(cx + Math.cos(cueAngle) * (R - ring / 2), cy + Math.sin(cueAngle) * (R - ring / 2), ring * 0.6, 0, Math.PI * 2);
       g.fill();
+      g.restore();
     }
 
-    // El disco, con sus surcos.
-    g.fillStyle = this.touching ? '#1d2228' : '#15181c';
+    // El disco: negro con un degradado (más claro si tienes la mano encima).
+    const body = g.createRadialGradient(cx, cy - disc * 0.3, disc * 0.1, cx, cy, disc);
+    body.addColorStop(0, this.touching ? '#2a3244' : '#1c2230');
+    body.addColorStop(1, this.touching ? '#141925' : '#0a0d13');
+    g.fillStyle = body;
     g.beginPath();
     g.arc(cx, cy, disc, 0, Math.PI * 2);
     g.fill();
+
+    // Surcos del vinilo.
     g.lineWidth = ratio;
-    g.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-    for (let r = disc * 0.42; r < disc - 2 * ratio; r += 4 * ratio) {
+    g.strokeStyle = 'rgba(255, 255, 255, 0.045)';
+    for (let r = disc * 0.42; r < disc - 2 * ratio; r += 3.5 * ratio) {
       g.beginPath();
       g.arc(cx, cy, r, 0, Math.PI * 2);
       g.stroke();
     }
 
-    // La etiqueta del centro.
+    // Reflejo de luz que gira con el disco (dos "brillos" opuestos, como en un vinilo de verdad).
+    const sheen = g.createConicGradient(turn, cx, cy);
+    sheen.addColorStop(0, 'rgba(255, 255, 255, 0)');
+    sheen.addColorStop(0.08, 'rgba(255, 255, 255, 0.07)');
+    sheen.addColorStop(0.16, 'rgba(255, 255, 255, 0)');
+    sheen.addColorStop(0.5, 'rgba(255, 255, 255, 0)');
+    sheen.addColorStop(0.58, 'rgba(255, 255, 255, 0.07)');
+    sheen.addColorStop(0.66, 'rgba(255, 255, 255, 0)');
+    sheen.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    g.fillStyle = sheen;
+    g.beginPath();
+    g.arc(cx, cy, disc, 0, Math.PI * 2);
+    g.fill();
+
+    // Borde fino del disco.
+    g.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    g.beginPath();
+    g.arc(cx, cy, disc - ratio / 2, 0, Math.PI * 2);
+    g.stroke();
+
+    // La etiqueta del centro: del color del plato si suena, gris si está parado.
     const label = disc * 0.36;
-    g.fillStyle = this.deck.isPlaying ? css.getPropertyValue('--accent') : '#2a2f36';
+    const labelFill = g.createRadialGradient(cx, cy - label * 0.4, label * 0.1, cx, cy, label);
+    if (this.deck.isPlaying) {
+      labelFill.addColorStop(0, '#ffffff');
+      labelFill.addColorStop(0.35, accent);
+      labelFill.addColorStop(1, accent);
+    } else {
+      labelFill.addColorStop(0, '#2c3446');
+      labelFill.addColorStop(1, '#1a202d');
+    }
+    g.save();
+    if (this.deck.isPlaying) {
+      g.shadowColor = accent;
+      g.shadowBlur = 14 * ratio;
+    }
+    g.fillStyle = labelFill;
     g.beginPath();
     g.arc(cx, cy, label, 0, Math.PI * 2);
     g.fill();
-    g.fillStyle = this.deck.isPlaying ? css.getPropertyValue('--bg') : css.getPropertyValue('--muted');
-    g.font = `700 ${label * 0.8}px system-ui, sans-serif`;
+    g.restore();
+    g.fillStyle = this.deck.isPlaying ? '#0b0d12' : css.getPropertyValue('--muted');
+    g.font = `700 ${label * 0.8}px Bahnschrift, system-ui, sans-serif`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText(this.letter, cx, cy + ratio);
 
     // La rayita que gira con la canción.
-    const turn = top + ((this.deck.position / SECONDS_PER_TURN) % 1) * Math.PI * 2;
     g.strokeStyle = css.getPropertyValue('--playhead');
     g.lineWidth = 3 * ratio;
     g.lineCap = 'round';

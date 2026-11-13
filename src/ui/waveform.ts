@@ -84,7 +84,7 @@ export class Waveform {
 
     // Lo ya escuchado, más oscuro.
     const playedX = Math.floor(fraction * width);
-    g.fillStyle = 'rgba(13, 15, 18, 0.55)';
+    g.fillStyle = 'rgba(5, 7, 11, 0.6)';
     g.fillRect(0, 0, playedX, waveHeight);
 
     if (cue !== null) {

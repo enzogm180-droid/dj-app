@@ -162,7 +162,7 @@ export class ScrollingWave {
     g.globalAlpha = 1;
 
     // 5. Lo ya escuchado (a la izquierda del cabezal), más oscuro.
-    g.fillStyle = 'rgba(13, 15, 18, 0.45)';
+    g.fillStyle = 'rgba(5, 7, 11, 0.5)';
     g.fillRect(0, waveTop, center, waveH);
 
     // 6. Punto CUE.
@@ -178,9 +178,13 @@ export class ScrollingWave {
     // 8. Letra: cada palabra en su momento. La que se canta ahora, resaltada.
     this.drawLyrics(position, xAt, lyricsH, ratio, css);
 
-    // 9. Cabezal fijo en el centro.
+    // 9. Cabezal fijo en el centro, con un halo del color del plato.
+    g.save();
+    g.shadowColor = css.getPropertyValue('--accent');
+    g.shadowBlur = 10 * ratio;
     g.fillStyle = css.getPropertyValue('--playhead');
     g.fillRect(center - ratio, 0, 2 * ratio, height);
+    g.restore();
   }
 
   private drawLyrics(

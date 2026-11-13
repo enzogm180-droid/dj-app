@@ -5,6 +5,7 @@
 import { Library, lastFolder, pickFolder, reconnect, supportsFolders, type Track } from '../library/library';
 import { useLibrary } from '../library/hotcue-store';
 import { formatTime } from './deck-view';
+import { registerControl } from '../midi/controls';
 
 export interface LibraryView {
   /** La biblioteca abierta ahora mismo (o null si aún no hay ninguna). */
@@ -47,6 +48,36 @@ export function createLibraryView(
   const rows = el<HTMLTableSectionElement>('rows');
 
   const view: { library: Library | null; refresh(): void } = { library: null, refresh: () => renderRows() };
+
+  // --- Canción elegida con la controladora --------------------------------------
+  // La rueda del navegador de la mesa mueve una "selección" por la lista y los
+  // botones LOAD cargan la canción seleccionada en su plato.
+  let visibleTracks: Track[] = [];
+  let selected = 0;
+
+  function showSelection(scroll: boolean): void {
+    [...rows.children].forEach((tr, i) => {
+      tr.classList.toggle('selected', i === selected);
+      tr.setAttribute('aria-selected', String(i === selected));
+      if (scroll && i === selected) tr.scrollIntoView({ block: 'nearest' });
+    });
+  }
+
+  registerControl('browse', {
+    turn: (delta) => {
+      if (!visibleTracks.length) return;
+      selected = Math.min(visibleTracks.length - 1, Math.max(0, selected + delta));
+      showSelection(true);
+    },
+  });
+  for (const letter of ['A', 'B'] as const) {
+    registerControl(`${letter}.load`, {
+      press: (down) => {
+        const track = visibleTracks[selected];
+        if (down && track && view.library) onLoad(track, view.library, letter);
+      },
+    });
+  }
 
   // --- Orden de la lista ---------------------------------------------------------
   // Clic en "Título", "BPM" o "Duración" = ordenar por esa columna.
@@ -123,9 +154,18 @@ export function createLibraryView(
         for (const btn of tr.querySelectorAll<HTMLButtonElement>('[data-deck]')) {
           btn.addEventListener('click', () => onLoad(track, library, btn.dataset.deck as 'A' | 'B'));
         }
+        // Clic en la fila (no en A/B) = seleccionarla, para cargarla luego con LOAD de la mesa.
+        tr.addEventListener('click', (e) => {
+          if ((e.target as HTMLElement).closest('button')) return;
+          selected = visibleTracks.indexOf(track);
+          showSelection(false);
+        });
         return tr;
       }),
     );
+    visibleTracks = visible;
+    selected = Math.min(selected, Math.max(0, visible.length - 1));
+    showSelection(false);
   }
 
   openBtn.addEventListener('click', async () => {

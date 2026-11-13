@@ -28,6 +28,15 @@ import {
   type Mixer,
 } from '../audio/mixer';
 import { createKnob, type Knob } from './knob';
+import { registerControl } from '../midi/controls';
+
+/** Mueve un fader de la pantalla desde fuera (controladora) como si lo movieras tú. */
+function moveSlider(input: HTMLInputElement, position: number): void {
+  const min = Number(input.min);
+  const max = Number(input.max);
+  input.value = String(min + position * (max - min));
+  input.dispatchEvent(new Event('input'));
+}
 
 const BANDS: { band: Band; label: string }[] = [
   { band: 'high', label: 'Agudos' },
@@ -108,8 +117,7 @@ function channelStrip(letter: string, channel: Channel, deck: Deck): HTMLElement
   }
 
   // GAIN
-  $('[data-el="gain"]').append(
-    createKnob({
+  const gainKnob = createKnob({
       label: 'Gain',
       ariaLabel: `Ganancia del canal ${letter}`,
       min: GAIN_MIN_DB,
@@ -120,10 +128,11 @@ function channelStrip(letter: string, channel: Channel, deck: Deck): HTMLElement
       bipolar: true,
       format: formatDb,
       onInput: (db) => channel.setGain(db),
-    }).el,
-  );
+  });
+  $('[data-el="gain"]').append(gainKnob.el);
 
   // Ruedas de EQ
+  const eqKnobs = {} as Record<Band, Knob>;
   for (const { band, label } of BANDS) {
     const knob = createKnob({
       label,
@@ -142,6 +151,7 @@ function channelStrip(letter: string, channel: Channel, deck: Deck): HTMLElement
         apply();
       },
     });
+    eqKnobs[band] = knob;
     $('[data-knobs="eq"]').append(knob.el);
   }
 
@@ -175,8 +185,7 @@ function channelStrip(letter: string, channel: Channel, deck: Deck): HTMLElement
   deck.addEventListener('stems', showStemLevels);
 
   // Filtro: centro = apagado, izquierda = paso bajo, derecha = paso alto.
-  $('[data-el="filter"]').append(
-    createKnob({
+  const filterKnob = createKnob({
       label: 'Filtro',
       ariaLabel: `Filtro del canal ${letter}`,
       min: -1,
@@ -187,8 +196,8 @@ function channelStrip(letter: string, channel: Channel, deck: Deck): HTMLElement
       bipolar: true,
       format: (v) => (Math.abs(v) < 0.02 ? 'off' : `${v < 0 ? 'LP' : 'HP'} ${Math.round(Math.abs(v) * 100)}%`),
       onInput: (v) => channel.setFilter(v),
-    }).el,
-  );
+  });
+  $('[data-el="filter"]').append(filterKnob.el);
 
   for (const btn of strip.querySelectorAll<HTMLButtonElement>('[data-mode]')) {
     btn.addEventListener('click', () => setMode(btn.dataset.mode as Mode));
@@ -200,7 +209,21 @@ function channelStrip(letter: string, channel: Channel, deck: Deck): HTMLElement
     setMode(deck.hasStems ? 'stems' : 'eq');
   });
 
-  bindSlider($<HTMLInputElement>('[data-el="volume"]'), 0.8, (v) => channel.setVolume(v));
+  const volume = $<HTMLInputElement>('[data-el="volume"]');
+  bindSlider(volume, 0.8, (v) => channel.setVolume(v));
+
+  // --- Controladora MIDI ---------------------------------------------------------
+  // Las 3 ruedas de EQ de la mesa mueven las ruedas que se ven: en modo EQ,
+  // Agudos/Medios/Bajos; en modo STEMS, Voces/Instru/Beat (como en la pantalla).
+  const eqOrStem = (band: Band, group: StemGroup) => ({
+    value: (p: number) => (mode === 'eq' ? eqKnobs[band] : stemKnobs[group]).setPosition(p),
+  });
+  registerControl(`${letter}.gain`, { value: (p) => gainKnob.setPosition(p) });
+  registerControl(`${letter}.eqHigh`, eqOrStem('high', 'vocal'));
+  registerControl(`${letter}.eqMid`, eqOrStem('mid', 'instru'));
+  registerControl(`${letter}.eqLow`, eqOrStem('low', 'beat'));
+  registerControl(`${letter}.filter`, { value: (p) => filterKnob.setPosition(p) });
+  registerControl(`${letter}.volume`, { value: (p) => moveSlider(volume, p) });
   return strip;
 }
 
@@ -224,5 +247,7 @@ export function createMixerView(root: HTMLElement, mixer: Mixer, deckA: Deck, de
   strips.append(channelStrip('A', mixer.a, deckA), channelStrip('B', mixer.b, deckB));
 
   bindSlider(root.querySelector<HTMLInputElement>('[data-el="master"]')!, 0.9, (v) => mixer.setMasterVolume(v));
-  bindSlider(root.querySelector<HTMLInputElement>('[data-el="xfader"]')!, 0.5, (v) => mixer.setCrossfader(v));
+  const xfader = root.querySelector<HTMLInputElement>('[data-el="xfader"]')!;
+  bindSlider(xfader, 0.5, (v) => mixer.setCrossfader(v));
+  registerControl('xfader', { value: (p) => moveSlider(xfader, p) });
 }

@@ -8,6 +8,7 @@
 import type { Deck, StemName } from '../audio/deck';
 import type { Library } from '../library/library';
 import type { FxRack } from '../audio/fx';
+import { registerControl, setLight } from '../midi/controls';
 import { createFxView } from './fx-view';
 import { Jog } from './jog';
 import { HOT_CUE_COLORS } from './stem-draw';
@@ -205,6 +206,7 @@ export function createDeckView(
     playBtn.textContent = deck.isPlaying ? '❚❚' : '▶';
     playBtn.setAttribute('aria-label', deck.isPlaying ? 'Pausa' : 'Play');
     playBtn.classList.toggle('on', deck.isPlaying);
+    setLight(`${letter}.play`, deck.isPlaying);
   }
 
   function updatePads(): void {
@@ -221,6 +223,7 @@ export function createDeckView(
     acapellaBtn.setAttribute('aria-pressed', String(acapella));
     instrumentalBtn.classList.toggle('active', instrumental);
     instrumentalBtn.setAttribute('aria-pressed', String(instrumental));
+    updatePadLights();
   }
 
   function updateBpm(): void {
@@ -312,6 +315,7 @@ export function createDeckView(
     syncBtn.disabled = syncTarget() === null;
     syncBtn.classList.toggle('on', !deck.isGliding && inSync());
     syncBtn.classList.toggle('gliding', deck.isGliding);
+    setLight(`${letter}.sync`, !deck.isGliding && inSync());
   }
 
   async function toggle(): Promise<void> {
@@ -337,6 +341,7 @@ export function createDeckView(
   function updateLoop(): void {
     const loop = deck.loop;
     loopBtn.classList.toggle('on', loop !== null);
+    setLight(`${letter}.loop`, loop !== null);
     loopInBtn.classList.toggle('on', deck.loopIn !== null);
     // Con un loop activo enseñamos su tamaño real; si no, el elegido.
     loopSizeEl.textContent = formatBeats(loop ? (loop.end - loop.start) / deck.beatLength : LOOP_SIZES[sizeIndex]);
@@ -368,7 +373,11 @@ export function createDeckView(
   deck.addEventListener('loop', updateLoop);
 
   // --- Páginas de pads: STEMS o HOT CUES ---------------------------------------
+  let padPage: 'stems' | 'hotcues' = 'stems';
+
   function showPadPage(page: 'stems' | 'hotcues'): void {
+    padPage = page;
+    updatePadLights();
     for (const tab of root.querySelectorAll<HTMLButtonElement>('[data-pad-page]')) {
       tab.setAttribute('aria-pressed', String(tab.dataset.padPage === page));
     }
@@ -396,7 +405,62 @@ export function createDeckView(
       btn.setAttribute('aria-label', t === null ? `Hot cue ${i + 1} vacío` : `Hot cue ${i + 1} en ${formatTime(t)}`);
       deleteBtns[i].disabled = t === null; // solo se puede borrar si hay algo
     });
+    updatePadLights();
   }
+
+  // --- Controladora MIDI -----------------------------------------------------------
+  // La mesa tiene 8 pads por plato. Hacen lo mismo que los pads de la pantalla
+  // según la página que esté elegida:
+  //   STEMS:     1-4 = Voces, Melodía, Bajo, Batería · 5 = Acapella · 6 = Instrumental
+  //   HOT CUES:  1-4 = hot cues (guardar / saltar)  · 5-8 = borrar el de encima
+  function padButton(n: number): HTMLButtonElement | null {
+    if (padPage === 'hotcues') return n < 4 ? hotCueBtns[n] : (deleteBtns[n - 4] ?? null);
+    return [...pads, acapellaBtn, instrumentalBtn][n] ?? null;
+  }
+
+  /** Luces de los pads de la mesa: encendido = stem sonando / hot cue guardado. */
+  function updatePadLights(): void {
+    for (let n = 0; n < 8; n++) {
+      let on = false;
+      if (padPage === 'hotcues') on = n < 4 && deck.hotCues[n] !== null;
+      else if (n < 4) on = deck.hasStems && deck.isStemOn(pads[n].dataset.stem as StemName);
+      else if (n < 6) on = (n === 4 ? acapellaBtn : instrumentalBtn).classList.contains('active');
+      setLight(`${letter}.pad${n + 1}`, on);
+    }
+  }
+
+  /** Un botón de la mesa = un clic en el botón de la pantalla (si está activo). */
+  const clickOnPress = (btn: () => HTMLButtonElement | null) => ({
+    press: (down: boolean) => {
+      const b = btn();
+      if (down && b && !b.disabled) b.click();
+    },
+  });
+  registerControl(`${letter}.play`, { press: (down) => down && void toggle() });
+  registerControl(`${letter}.cue`, {
+    press: (down) => {
+      if (!deck.loaded) return;
+      if (down) void deck.cueDown();
+      else deck.cueUp();
+    },
+  });
+  registerControl(`${letter}.sync`, clickOnPress(() => syncBtn));
+  // Fader de tempo: de 0 (un extremo) a 1 (el otro); el centro = 0 %.
+  // Con una pequeña "zona muerta" en el centro: así el fader en medio da 0 % exacto.
+  registerControl(`${letter}.tempo`, {
+    value: (p) => setTempo(Math.abs(p - 0.5) < 0.004 ? 0 : (p * 2 - 1) * range),
+  });
+  registerControl(`${letter}.loopIn`, clickOnPress(() => loopInBtn));
+  registerControl(`${letter}.loopOut`, clickOnPress(() => loopOutBtn));
+  registerControl(`${letter}.loop`, clickOnPress(() => loopBtn));
+  registerControl(`${letter}.loopHalf`, clickOnPress(() => loopHalfBtn));
+  registerControl(`${letter}.loopDouble`, clickOnPress(() => loopDoubleBtn));
+  registerControl(`${letter}.padPage.hotcues`, { press: (down) => down && showPadPage('hotcues') });
+  registerControl(`${letter}.padPage.stems`, { press: (down) => down && showPadPage('stems') });
+  for (let n = 0; n < 8; n++) registerControl(`${letter}.pad${n + 1}`, clickOnPress(() => padButton(n)));
+  registerControl(`${letter}.jogTouch`, { press: (down) => jog.midiTouch(down) });
+  registerControl(`${letter}.jogTop`, { turn: (ticks) => jog.midiTurn(ticks) });
+  registerControl(`${letter}.jogSide`, { turn: (ticks) => jog.midiTurn(ticks) });
 
   hotCueBtns.forEach((btn, i) => btn.addEventListener('click', () => deck.hotCue(i, snap)));
   deleteBtns.forEach((btn, i) => btn.addEventListener('click', () => deck.deleteHotCue(i)));
@@ -505,7 +569,9 @@ export function createDeckView(
       const d = deck.duration;
       waveform.draw(d ? position / d : 0, d ? deck.cuePoint / d : null, deck.loop, deck.hotCues);
       jog.draw();
-      cueBtn.classList.toggle('on', deck.isPlaying && Math.abs(deck.position - deck.cuePoint) < 0.05);
+      const cueOn = deck.isPlaying && Math.abs(deck.position - deck.cuePoint) < 0.05;
+      cueBtn.classList.toggle('on', cueOn);
+      setLight(`${letter}.cue`, cueOn);
     },
   };
 }
