@@ -13,6 +13,8 @@ import { Deck, setupDecks } from './audio/deck';
 import { FxRack } from './audio/fx';
 import { Mixer } from './audio/mixer';
 import { Sampler } from './audio/sampler';
+import { watchAudio } from './audio/health';
+import { createAudioView } from './ui/audio-view';
 import { createDeckView, deckSettings, type DeckView } from './ui/deck-view';
 import { createLibraryView } from './ui/library-view';
 import { createMidiView } from './ui/midi-view';
@@ -30,9 +32,11 @@ app.innerHTML = `
       Asistencia de golpe: ON
     </button>
     <button class="assist midi-btn" id="midi" title="Conectar la controladora (y abrir/cerrar el monitor MIDI)">MIDI</button>
+    <button class="assist audio-btn" id="audio-status" title="Estado del audio y registro de problemas">Audio OK</button>
     <span class="hint">A: Q play · W cue — B: P play · O cue — doble clic en un control = valor inicial</span>
   </header>
   <section id="midi-panel" aria-label="Monitor MIDI"></section>
+  <section id="audio-panel" aria-label="Registro de audio"></section>
   <section class="lanes" aria-label="Ondas de los dos platos">
     <div class="lane"><span class="lane-letter">A</span><canvas id="lane-a"></canvas></div>
     <div class="lane"><span class="lane-letter">B</span><canvas id="lane-b"></canvas></div>
@@ -115,6 +119,25 @@ assistBtn.addEventListener('click', () => {
   assistBtn.setAttribute('aria-pressed', String(deckSettings.assist));
   assistBtn.textContent = `Asistencia de golpe: ${deckSettings.assist ? 'ON' : 'OFF'}`;
 });
+
+// Vigilante del audio: si deja de sonar, intenta arreglarlo solo y lo apunta
+// en el registro (indicador "AUDIO" de arriba).
+deckA.name = 'A';
+deckB.name = 'B';
+const masterMeter = ctx.createAnalyser();
+mixer.tap(masterMeter);
+const reactivateAudio = () => {
+  void ctx.resume();
+  deckA.resetAudio();
+  deckB.resetAudio();
+};
+watchAudio({
+  ctx,
+  analyser: masterMeter,
+  anyPlaying: () => deckA.isPlaying || deckB.isPlaying,
+  rebuild: reactivateAudio,
+});
+createAudioView(document.getElementById('audio-status') as HTMLButtonElement, document.getElementById('audio-panel')!, reactivateAudio);
 
 // Controladora MIDI (botón "MIDI" de arriba + monitor).
 createMidiView(document.getElementById('midi') as HTMLButtonElement, document.getElementById('midi-panel')!);
