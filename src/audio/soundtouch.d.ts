@@ -7,6 +7,8 @@ declare module 'soundtouchjs' {
     readonly frameCount: number;
     putSamples(samples: Float32Array, position?: number, numFrames?: number): void;
     receiveSamples(output: Float32Array, numFrames?: number): void;
+    /** Tira (descarta) `numFrames` muestras del principio. */
+    receive(numFrames?: number): void;
   }
 
   export class Stretch {

@@ -163,6 +163,11 @@ export class Mixer {
     node.connect(this.master);
   }
 
+  /** Conecta un "medidor" a la salida master (para vigilar lo que sale). */
+  tap(node: AudioNode): void {
+    this.master.connect(node);
+  }
+
   setMasterVolume(value: number): void {
     this.master.gain.setTargetAtTime(value * value, this.ctx.currentTime, 0.01);
   }

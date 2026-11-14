@@ -2408,3 +2408,77 @@ input.fader::-webkit-slider-thumb,
 .pad-tabs button {
   padding-inline: 8px;
 }
+
+/* --- Indicador AUDIO y registro de audio ---------------------------------------- */
+.topbar .midi-btn {
+  margin-right: 0;
+}
+
+.topbar .audio-btn {
+  margin-left: 8px;
+  margin-right: auto;
+  --accent: var(--play);
+}
+
+/* El puntito de color: verde = bien, ámbar = hubo un aviso, rojo = parado. */
+.audio-btn::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  vertical-align: 1px;
+}
+
+.audio-btn[data-status='aviso'] {
+  --accent: var(--cue);
+}
+
+.audio-btn[data-status='parado'] {
+  --accent: var(--danger);
+  color: var(--danger);
+  border-color: var(--danger);
+  animation: sync-pulse 0.8s ease-in-out infinite alternate;
+}
+
+.audio-panel {
+  background: linear-gradient(180deg, #121722 0%, var(--panel) 60%);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 12px;
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+
+.audio-panel-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.audio-panel-bar strong {
+  font-family: var(--font-display);
+}
+
+.audio-panel-bar .muted-text {
+  flex: 1;
+}
+
+.audio-log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: ui-monospace, Consolas, monospace;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.audio-log li {
+  padding: 1px 0;
+  color: var(--text);
+}

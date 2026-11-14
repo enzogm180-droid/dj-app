@@ -21,6 +21,7 @@
  */
 import { analyze, type TrackVisual } from './analysis';
 import { detectBeats } from './bpm';
+import { audioHealth } from './health';
 import { alignLines, type LyricLine } from './lyrics-align';
 import { loadHotCues, saveHotCues } from '../library/hotcue-store';
 import keylockUrl from './keylock-processor.ts?worker&url';
@@ -78,7 +79,11 @@ export class Deck extends EventTarget {
   private readonly ctx: AudioContext;
   /** Todas las capas se juntan aquí antes de pasar por el key lock. */
   private readonly bus: GainNode;
-  private readonly keylock: AudioWorkletNode;
+  private keylock!: AudioWorkletNode;
+  /** A dónde va el sonido del plato (los efectos y el mixer). */
+  private readonly output: AudioNode;
+  /** Nombre del plato para el registro de audio ("A" o "B"). */
+  name = '';
 
   private layers: Layer[] = [];
   private sources: AudioBufferSourceNode[] = [];
@@ -94,6 +99,8 @@ export class Deck extends EventTarget {
   private startedAt = 0;
   /** Tempo: 1 = normal, 1.05 = +5 %, 0.95 = -5 %. */
   private rate = 1;
+  /** Número de la última orden de arrancar/parar (ver play()). */
+  private transportToken = 0;
   private playing = false;
 
   /** BPM original de la canción (null si no se ha podido detectar). */
@@ -132,8 +139,39 @@ export class Deck extends EventTarget {
     super();
     this.ctx = ctx;
     this.bus = ctx.createGain();
-    this.keylock = new AudioWorkletNode(ctx, 'keylock', { outputChannelCount: [2] });
-    this.bus.connect(this.keylock).connect(output);
+    this.output = output;
+    this.buildKeylock();
+  }
+
+  /**
+   * Crea (o vuelve a crear) el key lock: bus → key lock → efectos/mixer.
+   * Si el procesador falla del todo, el navegador lo apaga para siempre; en
+   * ese caso hacemos uno nuevo y el plato vuelve a sonar.
+   */
+  private buildKeylock(): void {
+    if (this.keylock) {
+      this.bus.disconnect(this.keylock);
+      this.keylock.disconnect();
+      this.keylock.port.onmessage = null;
+    }
+    const node = new AudioWorkletNode(this.ctx, 'keylock', { outputChannelCount: [2] });
+    node.parameters.get('pitch')!.value = 1 / this.rate;
+    node.onprocessorerror = () => {
+      audioHealth.log(`Plato ${this.name}: el key lock ha fallado → lo reconstruyo`, 'aviso');
+      this.buildKeylock();
+    };
+    // Avisos del propio procesador (errores atrapados, NaN, retraso recortado).
+    node.port.onmessage = (e: MessageEvent<{ type: string; detail: string }>) => {
+      if (e.data.type === 'recorte') return; // normal al cambiar el tempo: no llenamos el registro
+      audioHealth.log(`Plato ${this.name}: ${e.data.detail}`, 'aviso');
+    };
+    this.bus.connect(node).connect(this.output);
+    this.keylock = node;
+  }
+
+  /** "Reactivar audio": rehace el key lock (por si se había quedado atascado). */
+  resetAudio(): void {
+    this.buildKeylock();
   }
 
   /** Carga una canción normal (un solo archivo). `info`: datos que ya sepamos (BPM…). */
@@ -245,9 +283,21 @@ export class Deck extends EventTarget {
    */
   async play(when?: number): Promise<void> {
     if (!this.loaded || this.playing) return;
+    // Cada arranque o parada lleva un número. Si mientras esperamos al
+    // navegador (abajo) llega OTRA orden (otro play, un salto, una pausa…),
+    // este arranque ya no vale y no hace nada.
+    //
+    // ⚠ Sin esto, pulsar rápido (pads, hot cues, beat jump) arrancaba DOS
+    // copias de la canción: una se quedaba sonando "huérfana" por debajo,
+    // sin que nadie la parase, gastando memoria y trabajo hasta que el audio
+    // se moría al rato.
+    const token = ++this.transportToken;
     // Los navegadores no dejan sonar audio hasta que el usuario hace clic;
-    // "resume" desbloquea el sonido tras ese primer clic.
-    await this.ctx.resume();
+    // "resume" desbloquea el sonido tras ese primer clic. Solo esperamos si hace falta.
+    if (this.ctx.state !== 'running') {
+      await this.ctx.resume();
+      if (token !== this.transportToken || this.playing || !this.loaded) return;
+    }
     if (this.offset >= this.duration) this.offset = 0;
     const loop = this.loop;
     if (loop && this.offset >= loop.end) this.offset = loop.start;
@@ -482,6 +532,7 @@ export class Deck extends EventTarget {
    * nuevas empiezan justo cuando paran las viejas.
    */
   private jumpAt(target: number, when: number): void {
+    this.transportToken++; // cualquier play que estuviera esperando ya no vale
     const old = this.sources;
     this.sources = [];
     for (const s of old) {
@@ -787,6 +838,7 @@ export class Deck extends EventTarget {
   }
 
   private stopSources(): void {
+    this.transportToken++; // cualquier play que estuviera esperando ya no vale
     const sources = this.sources;
     this.sources = []; // así onended sabe que lo paramos nosotros
     for (const s of sources) {
