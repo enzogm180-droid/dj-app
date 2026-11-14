@@ -14,6 +14,8 @@
  * Todo son nodos de la Web Audio API conectados en cadena, como cables.
  */
 
+import { ColorFx, type CfxType } from './cfx';
+
 /** Las tres bandas del ecualizador. */
 export type Band = 'low' | 'mid' | 'high';
 
@@ -29,9 +31,10 @@ export class Channel {
   /** Aquí conectamos el plato. Es también el control de GAIN. */
   readonly input: GainNode;
   private readonly eq: Record<Band, BiquadFilterNode>;
-  /** Filtro DJ: un paso bajo (quita agudos) y un paso alto (quita graves). */
-  private readonly lowpass: BiquadFilterNode;
-  private readonly highpass: BiquadFilterNode;
+  /** La ruedita del filtro: filtro, eco, espacio… (ver cfx.ts). */
+  private readonly cfx: ColorFx;
+  /** Cuánto dura un golpe de la canción de este canal (para eco y gate). Lo pone main.ts. */
+  beatSeconds: () => number = () => 0.5;
   private readonly fader: GainNode;
   /** Lo controla el crossfader (no lo toques directamente). */
   readonly xfade: GainNode;
@@ -59,29 +62,19 @@ export class Channel {
 
     this.eq = { low, mid, high };
 
-    // Q = 1: una pequeña "resonancia" en la frecuencia de corte, el sonido
-    // típico de filtro de DJ.
-    this.lowpass = ctx.createBiquadFilter();
-    this.lowpass.type = 'lowpass';
-    this.lowpass.Q.value = 1;
-    this.highpass = ctx.createBiquadFilter();
-    this.highpass.type = 'highpass';
-    this.highpass.Q.value = 1;
-    this.setFilter(0);
+    this.cfx = new ColorFx(ctx, () => this.beatSeconds());
 
     this.fader = ctx.createGain();
     this.xfade = ctx.createGain();
 
-    // Conectamos la cadena: entrada → bajos → medios → agudos → filtro → volumen → crossfader → salida
-    this.input
-      .connect(low)
-      .connect(mid)
-      .connect(high)
-      .connect(this.lowpass)
-      .connect(this.highpass)
-      .connect(this.fader)
-      .connect(this.xfade)
-      .connect(output);
+    // Conectamos la cadena: entrada → bajos → medios → agudos → filtro/CFX → volumen → crossfader → salida
+    this.input.connect(low).connect(mid).connect(high).connect(this.cfx.input);
+    this.cfx.output.connect(this.fader).connect(this.xfade).connect(output);
+  }
+
+  /** Qué hace la ruedita del filtro (filtro, eco, espacio…). */
+  setCfxType(type: CfxType): void {
+    this.cfx.setType(type);
   }
 
   /**
@@ -94,21 +87,14 @@ export class Channel {
   }
 
   /**
-   * Filtro DJ, de -1 a 1:
-   *  - 0 (centro): sin filtro.
-   *  - Hacia -1: paso bajo. Quita agudos y suena "lejano", como desde otra sala.
-   *  - Hacia +1: paso alto. Quita graves y suena "fino", ideal para una subida.
-   *
-   * La frecuencia se mueve de forma exponencial (como el oído percibe los
-   * tonos), así todo el recorrido de la rueda se nota igual.
+   * La ruedita del filtro, de -1 a 1:
+   *  - 0 (centro): sin efecto.
+   *  - Hacia -1: versión "oscura" (con FILTRO: paso bajo, quita agudos, suena lejano).
+   *  - Hacia +1: versión "brillante" (con FILTRO: paso alto, quita graves, ideal para una subida).
+   * Qué efecto exacto suena lo elige setCfxType (botón FX).
    */
   setFilter(value: number): void {
-    const now = this.ctx.currentTime;
-    const v = Math.abs(value) < 0.02 ? 0 : value; // zona muerta en el centro
-    const lowpassHz = v < 0 ? 20000 * Math.pow(150 / 20000, -v) : 22000;
-    const highpassHz = v > 0 ? 20 * Math.pow(6000 / 20, v) : 10;
-    this.lowpass.frequency.setTargetAtTime(lowpassHz, now, 0.02);
-    this.highpass.frequency.setTargetAtTime(highpassHz, now, 0.02);
+    this.cfx.setValue(value);
   }
 
   /** Ecualizador: `db` entre EQ_MIN_DB y EQ_MAX_DB; 0 = sin cambios. */
@@ -154,7 +140,12 @@ export class Mixer {
     this.b.xfade.gain.setTargetAtTime(Math.sin(angle), now, 0.01);
   }
 
-  /** Volumen general, de 0 a 1. */
+  /** Qué hacen las ruedas del filtro de los dos canales (botón FX). */
+  setCfxType(type: CfxType): void {
+    this.a.setCfxType(type);
+    this.b.setCfxType(type);
+  }
+
   /**
    * Conecta algo directo al master, sin pasar por ningún canal ni por el
    * crossfader (lo usa el sampler: suena igual hagas lo que hagas con los faders).
@@ -168,6 +159,7 @@ export class Mixer {
     this.master.connect(node);
   }
 
+  /** Volumen general, de 0 a 1. */
   setMasterVolume(value: number): void {
     this.master.gain.setTargetAtTime(value * value, this.ctx.currentTime, 0.01);
   }

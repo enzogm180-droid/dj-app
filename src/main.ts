@@ -2,15 +2,14 @@
  * Punto de entrada de la app: monta los dos platos, el mixer y la
  * biblioteca, y los conecta.
  *
- *   Plato A → Efectos A ─┐
- *                        ├─ Mixer ─→ altavoces
- *   Plato B → Efectos B ─┘
+ *   Plato A ─┐
+ *            ├─ Mixer (EQ, ruedita de efectos, faders) ─→ altavoces
+ *   Plato B ─┘
  *       ↑
  *   Biblioteca (tu carpeta de música y sus stems)
  */
 import './style.css';
 import { Deck, setupDecks } from './audio/deck';
-import { FxRack } from './audio/fx';
 import { Mixer } from './audio/mixer';
 import { Sampler } from './audio/sampler';
 import { watchAudio } from './audio/health';
@@ -19,6 +18,7 @@ import { createDeckView, deckSettings, type DeckView } from './ui/deck-view';
 import { createLibraryView } from './ui/library-view';
 import { createMidiView } from './ui/midi-view';
 import { simulateMidi } from './midi/midi';
+import { setShift } from './midi/controls';
 import { createMixerView } from './ui/mixer-view';
 import { updateFaderFills } from './ui/fader-fill';
 import { ScrollingWave } from './ui/scrolling-wave';
@@ -63,13 +63,15 @@ app.innerHTML = `
 const ctx = new AudioContext();
 await setupDecks(ctx); // prepara el key lock (mantener el tono al cambiar el tempo)
 const mixer = new Mixer(ctx);
-// Plato → efectos (3 ranuras) → canal del mixer. Los efectos con ritmo
-// necesitan saber cuánto dura un golpe AHORA (BPM de la canción × tempo).
-const beatSeconds = (deck: Deck | undefined) => (deck ? deck.beatLength / deck.tempo : 0.5);
-const fxA = new FxRack(ctx, mixer.a.input, () => beatSeconds(deckA));
-const fxB = new FxRack(ctx, mixer.b.input, () => beatSeconds(deckB));
-const deckA: Deck = new Deck(ctx, fxA.input);
-const deckB: Deck = new Deck(ctx, fxB.input);
+// Plato → canal del mixer. Los efectos están en la ruedita del filtro de cada
+// canal (src/audio/cfx.ts); los que van al ritmo necesitan saber cuánto dura
+// un golpe AHORA (BPM de la canción × tempo).
+const beatSeconds = (deck: Deck) => deck.beatLength / deck.tempo;
+const deckA: Deck = new Deck(ctx, mixer.a.input);
+const deckB: Deck = new Deck(ctx, mixer.b.input);
+// El eco y el gate de la ruedita del filtro van al ritmo de la canción de su canal.
+mixer.a.beatSeconds = () => beatSeconds(deckA);
+mixer.b.beatSeconds = () => beatSeconds(deckB);
 
 const libraryView = createLibraryView(document.getElementById('library')!, (track, library, letter) => {
   const view = letter === 'A' ? viewA : viewB;
@@ -103,8 +105,8 @@ const libraryView = createLibraryView(document.getElementById('library')!, (trac
 const getLibrary = () => libraryView.library;
 // Sampler: 8 sonidos compartidos por los dos platos, directos al master.
 const sampler = new Sampler(ctx, (node) => mixer.connectToMaster(node));
-const viewA: DeckView = createDeckView(document.getElementById('deck-a')!, 'A', deckA, deckB, fxA, getLibrary, sampler);
-const viewB: DeckView = createDeckView(document.getElementById('deck-b')!, 'B', deckB, deckA, fxB, getLibrary, sampler);
+const viewA: DeckView = createDeckView(document.getElementById('deck-a')!, 'A', deckA, deckB, getLibrary, sampler);
+const viewB: DeckView = createDeckView(document.getElementById('deck-b')!, 'B', deckB, deckA, getLibrary, sampler);
 createMixerView(document.getElementById('mixer')!, mixer, deckA, deckB);
 
 // Solo mientras desarrollamos (npm run dev): deja los platos a mano en la
@@ -153,6 +155,16 @@ laneB.onResume = () => void viewB.toggle();
 //   Plato A: Q = play/pausa, W = CUE (mantener)
 //   Plato B: P = play/pausa, O = CUE (mantener)
 const typing = (e: KeyboardEvent) => e.target instanceof HTMLInputElement && e.target.type !== 'range';
+
+// SHIFT del teclado: la tecla Mayúsculas (mientras la mantienes).
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Shift') setShift('teclado', true);
+});
+window.addEventListener('keyup', (e) => {
+  if (e.key === 'Shift') setShift('teclado', false);
+});
+// Si cambias de ventana con Mayúsculas pulsada, el "soltar" no llega: lo soltamos nosotros.
+window.addEventListener('blur', () => setShift('teclado', false));
 
 window.addEventListener('keydown', (e) => {
   if (e.repeat || e.ctrlKey || e.altKey || e.metaKey) return;

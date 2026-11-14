@@ -119,9 +119,70 @@ export function simulateMidi(bytes: number[]): void {
   handle(new Uint8Array(bytes));
 }
 
+// --- APRENDER ----------------------------------------------------------------------
+//
+// Para los botones que no sabemos qué número mandan (o para otra controladora):
+// eliges una función, pulsas "Aprender" y tocas el botón de la mesa. Se guarda
+// en el navegador y manda sobre el mapa de fábrica.
+
+const LEARNED_KEY = 'dj-app:midi-aprendido';
+
+function loadLearned(): MidiBinding[] {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LEARNED_KEY) ?? '[]');
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
+  }
+}
+
+let learned: MidiBinding[] = loadLearned();
+/** Si estamos esperando a que toques un botón para aprenderlo: a qué función irá. */
+let learning: { control: string; done: (hex: string) => void } | null = null;
+
+/** Lo siguiente que toques en la mesa (un botón) hará `control`. Devuelve el mensaje aprendido. */
+export function learn(control: string): Promise<string> {
+  learning?.done(''); // si ya esperábamos otra cosa, la cancelamos
+  return new Promise((resolve) => {
+    learning = { control, done: resolve };
+  });
+}
+
+export function cancelLearn(): void {
+  learning?.done('');
+  learning = null;
+}
+
+/** Lo aprendido hasta ahora (para enseñarlo en el monitor). */
+export function learnedBindings(): MidiBinding[] {
+  return [...learned];
+}
+
+export function forgetLearned(): void {
+  learned = [];
+  try {
+    localStorage.removeItem(LEARNED_KEY);
+  } catch {
+    // nada
+  }
+  buildLookup();
+}
+
+function saveLearned(binding: MidiBinding): void {
+  // Un botón solo puede hacer una cosa: quitamos lo que tuviera antes ese botón.
+  learned = learned.filter((b) => !(b.status === binding.status && b.data1 === binding.data1));
+  learned.push(binding);
+  try {
+    localStorage.setItem(LEARNED_KEY, JSON.stringify(learned));
+  } catch {
+    // sin almacenamiento: vale hasta recargar
+  }
+  buildLookup();
+}
+
 function buildLookup(): void {
   lookup = new Map();
-  for (const binding of map.bindings) {
+  for (const binding of [...map.bindings, ...learned]) {
     lookup.set(`${binding.status}:${binding.data1}`, { binding, fine: false });
     // Faders de alta precisión: el fino llega con el número + 0x20.
     if (binding.kind === 'fader' && binding.data1 < 0x20) {
@@ -142,6 +203,16 @@ function handle(data: Uint8Array | null): void {
     st = 0x90 | (st & 0x0f);
     value = 0;
   }
+  // ¿Estamos aprendiendo? El primer botón que se PULSE (nota con valor) se queda con la función.
+  if (learning && (st & 0xf0) === 0x90 && value > 0) {
+    const { control, done } = learning;
+    learning = null;
+    saveLearned({ status: st, data1, kind: 'button', control });
+    for (const l of monitorListeners) l({ hex: hex(data), control: `${control} (aprendido)` });
+    done(hex(data));
+    return;
+  }
+
   const found = lookup.get(`${st}:${data1}`);
   for (const l of monitorListeners) l({ hex: hex(data), control: found?.binding.control ?? null });
   if (!found) return;

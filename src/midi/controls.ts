@@ -71,3 +71,43 @@ export function onLight(listener: LightListener): void {
 export function currentLights(): Map<string, boolean> {
   return new Map(lightState);
 }
+
+// --- SHIFT -----------------------------------------------------------------------
+//
+// SHIFT es un "comodín": mientras está pulsado, algunos botones hacen OTRA cosa
+// (p. ej. SHIFT + SYNC = volver al BPM original; SHIFT + FX = el otro banco).
+//
+// Se puede activar de tres formas, y basta con una:
+//   - "mesa":     el botón SHIFT de la controladora (mientras lo mantienes)
+//   - "teclado":  la tecla Mayúsculas (mientras la mantienes)
+//   - "pantalla": el botón SHIFT del mixer (se queda pulsado hasta volver a pulsarlo,
+//                 porque con el ratón no puedes mantenerlo y a la vez pulsar otra cosa)
+
+type ShiftSource = 'mesa' | 'teclado' | 'pantalla';
+const shiftSources = new Set<ShiftSource>();
+const shiftListeners = new Set<(on: boolean) => void>();
+
+/** ¿Está SHIFT activo ahora? */
+export function isShift(): boolean {
+  return shiftSources.size > 0;
+}
+
+export function setShift(source: ShiftSource, on: boolean): void {
+  const before = isShift();
+  if (on) shiftSources.add(source);
+  else shiftSources.delete(source);
+  if (isShift() !== before) for (const listener of shiftListeners) listener(isShift());
+}
+
+/** ¿Está el SHIFT de la pantalla enganchado? (para pintar el botón) */
+export function isScreenShift(): boolean {
+  return shiftSources.has('pantalla');
+}
+
+/** Avisa cada vez que SHIFT se activa o desactiva. */
+export function onShift(listener: (on: boolean) => void): void {
+  shiftListeners.add(listener);
+}
+
+// El botón SHIFT de la controladora (hay uno por plato: cualquiera vale).
+registerControl('shift', { press: (down) => setShift('mesa', down) });

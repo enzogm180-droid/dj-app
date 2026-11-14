@@ -28,7 +28,8 @@ import {
   type Mixer,
 } from '../audio/mixer';
 import { createKnob, type Knob } from './knob';
-import { registerControl } from '../midi/controls';
+import { isScreenShift, isShift, onShift, registerControl, setLight, setShift } from '../midi/controls';
+import { CFX_TYPES, type CfxType } from '../audio/cfx';
 
 /** Mueve un fader de la pantalla desde fuera (controladora) como si lo movieras tú. */
 function moveSlider(input: HTMLInputElement, position: number): void {
@@ -184,20 +185,28 @@ function channelStrip(letter: string, channel: Channel, deck: Deck): HTMLElement
   };
   deck.addEventListener('stems', showStemLevels);
 
-  // Filtro: centro = apagado, izquierda = paso bajo, derecha = paso alto.
+  // Ruedita del filtro: centro = apagado. Qué hace la elige el botón FX (cfx.ts).
+  //   FILTRO: izquierda = paso bajo (LP), derecha = paso alto (HP).
+  //   Los demás: izquierda = versión oscura (◀), derecha = brillante (▶).
   const filterKnob = createKnob({
       label: 'Filtro',
-      ariaLabel: `Filtro del canal ${letter}`,
+      ariaLabel: `Filtro (efecto) del canal ${letter}`,
       min: -1,
       max: 1,
       value: 0,
       defaultValue: 0,
       step: 0.01,
       bipolar: true,
-      format: (v) => (Math.abs(v) < 0.02 ? 'off' : `${v < 0 ? 'LP' : 'HP'} ${Math.round(Math.abs(v) * 100)}%`),
+      format: (v) => {
+        if (Math.abs(v) < 0.02) return 'off';
+        const pct = `${Math.round(Math.abs(v) * 100)}%`;
+        if (cfxState.type === 'filtro') return `${v < 0 ? 'LP' : 'HP'} ${pct}`;
+        return v < 0 ? `◀ ${pct}` : `${pct} ▶`;
+      },
       onInput: (v) => channel.setFilter(v),
   });
   $('[data-el="filter"]').append(filterKnob.el);
+  filterKnobs.push(filterKnob);
 
   for (const btn of strip.querySelectorAll<HTMLButtonElement>('[data-mode]')) {
     btn.addEventListener('click', () => setMode(btn.dataset.mode as Mode));
@@ -232,6 +241,11 @@ export function createMixerView(root: HTMLElement, mixer: Mixer, deckA: Deck, de
   root.setAttribute('aria-label', 'Mixer');
   root.innerHTML = `
     <div class="strips"></div>
+    <div class="cfx-panel" role="group" aria-label="Efecto de la ruedita del filtro">
+      <button class="cfx-shift" data-el="shift" aria-pressed="false"
+        title="SHIFT: mientras está encendido, los botones hacen su otra función (también vale la tecla Mayúsculas)">SHIFT</button>
+      ${[0, 1, 2, 3].map((i) => `<button class="cfx-btn" data-cfx-slot="${i}" aria-pressed="false"></button>`).join('')}
+    </div>
     <label class="master">
       <span>Master</span>
       <input type="range" data-el="master" min="0" max="1" step="0.01" value="0.9" aria-label="Volumen master" />
@@ -250,4 +264,60 @@ export function createMixerView(root: HTMLElement, mixer: Mixer, deckA: Deck, de
   const xfader = root.querySelector<HTMLInputElement>('[data-el="xfader"]')!;
   bindSlider(xfader, 0.5, (v) => mixer.setCrossfader(v));
   registerControl('xfader', { value: (p) => moveSlider(xfader, p) });
+
+  // --- Botones FX: qué hace la ruedita del filtro ------------------------------------
+  //  4 botones = 4 efectos. Con SHIFT, los mismos 4 botones son los otros 4 efectos
+  //  (igual que los 4 botones de FX de la Hercules Inpulse 500).
+  const shiftBtn = root.querySelector<HTMLButtonElement>('[data-el="shift"]')!;
+  const slotBtns = [...root.querySelectorAll<HTMLButtonElement>('[data-cfx-slot]')];
+
+  function selectCfx(type: CfxType): void {
+    cfxState.type = type;
+    mixer.setCfxType(type);
+    const label = CFX_TYPES.find((t) => t.id === type)!.label;
+    for (const knob of filterKnobs) knob.setLabel(label);
+    showCfx();
+  }
+
+  /** Pinta los 4 botones (del banco que toque según SHIFT) y las luces de la mesa. */
+  function showCfx(): void {
+    const bank = isShift() ? 1 : 0;
+    slotBtns.forEach((btn, i) => {
+      const fx = CFX_TYPES[bank * 4 + i];
+      btn.textContent = fx.label;
+      btn.setAttribute('aria-pressed', String(fx.id === cfxState.type));
+      setLight(`cfx.${i + 1}`, fx.id === cfxState.type);
+    });
+    shiftBtn.setAttribute('aria-pressed', String(isScreenShift()));
+    shiftBtn.classList.toggle('held', isShift() && !isScreenShift()); // pulsado en la mesa o el teclado
+    root.querySelector('.cfx-panel')!.classList.toggle('shifted', isShift());
+    // SMART CFX de la FLX4 encendido cuando hay un efecto distinto del filtro normal.
+    setLight('cfx.smart', cfxState.type !== 'filtro');
+  }
+
+  /** Pasa al efecto siguiente (o al anterior con SHIFT), en círculo. */
+  function cycleCfx(): void {
+    const i = CFX_TYPES.findIndex((t) => t.id === cfxState.type);
+    const step = isShift() ? -1 : 1;
+    selectCfx(CFX_TYPES[(i + step + CFX_TYPES.length) % CFX_TYPES.length].id);
+  }
+
+  /** Botón n (0-3) del banco que toque. */
+  const pressSlot = (n: number) => selectCfx(CFX_TYPES[(isShift() ? 4 : 0) + n].id);
+
+  slotBtns.forEach((btn, i) => btn.addEventListener('click', () => pressSlot(i)));
+  shiftBtn.addEventListener('click', () => setShift('pantalla', !isScreenShift()));
+  onShift(showCfx);
+
+  // Controladora: SMART CFX (FLX4) = siguiente / SHIFT + SMART CFX = anterior;
+  // FX 1-4 (Inpulse 500) = elegir directamente (con SHIFT, los otros 4).
+  registerControl('cfx.next', { press: (down) => down && cycleCfx() });
+  for (let n = 0; n < 4; n++) registerControl(`cfx.${n + 1}`, { press: (down) => down && pressSlot(n) });
+
+  selectCfx('filtro');
 }
+
+/** Qué efecto tiene la ruedita del filtro ahora (común a los dos canales). */
+const cfxState: { type: CfxType } = { type: 'filtro' };
+/** Las ruedas del filtro de los dos canales (para cambiarles el nombre). */
+const filterKnobs: Knob[] = [];

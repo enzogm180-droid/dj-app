@@ -1070,49 +1070,6 @@ button:disabled {
   min-width: 0;
 }
 
-/* Efectos: 3 filas */
-.fx {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.fx-row {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) minmax(60px, 90px);
-  gap: 6px;
-  align-items: center;
-}
-
-.fx-on {
-  padding: 3px 0;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.fx-row.on .fx-on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--bg);
-}
-
-.fx select {
-  min-width: 0;
-  background: var(--panel-2);
-  color: var(--text);
-  border: 1px solid #353a42;
-  border-radius: 5px;
-  padding: 3px 6px;
-  font: inherit;
-  font-size: 12px;
-}
-
-.fx input[type='range'] {
-  width: 100%;
-  margin: 0;
-  accent-color: var(--accent);
-}
-
 /* Pads y pestañas, más pequeños */
 .pad-pages {
   margin-top: 0;
@@ -1775,8 +1732,7 @@ button:disabled {
 .assist[aria-pressed='true'],
 .midi-btn.on,
 .mode button[aria-pressed='true'],
-.pad-tabs button[aria-pressed='true'],
-.fx-row.on .fx-on {
+.pad-tabs button[aria-pressed='true'] {
   color: color-mix(in srgb, var(--accent) 80%, white);
   background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 28%, #151a25), color-mix(in srgb, var(--accent) 14%, #11151e));
   border-color: var(--accent);
@@ -2035,28 +1991,6 @@ button:disabled {
   box-shadow: 0 0 12px -2px color-mix(in srgb, var(--loop) 85%, transparent);
 }
 
-/* --- Efectos ---------------------------------------------------------------------- */
-.fx select {
-  appearance: none;
-  background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237b8598' stroke-width='1.5'/%3E%3C/svg%3E")
-      no-repeat right 7px center,
-    linear-gradient(180deg, #19202d, #121722);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 3px 22px 3px 8px;
-  font-family: var(--font-display);
-  cursor: pointer;
-}
-
-.fx select:hover {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-}
-
-.fx select option {
-  background: var(--panel-2);
-}
-
 /* --- Faders (deslizadores) a medida ----------------------------------------------- */
 /*
  * Cada fader es:   ranura hundida  +  RELLENO de color hasta la tapa  +  tapa metálica
@@ -2207,13 +2141,6 @@ input.fader::-webkit-slider-thumb,
   box-shadow:
     0 2px 5px rgb(0 0 0 / 0.8),
     0 0 10px -2px rgb(255 255 255 / 0.35);
-}
-
-/* Efectos: faders pequeños */
-.fx input[type='range'] {
-  --thumb: 10px;
-  --groove: 3px;
-  height: 16px;
 }
 
 .xfader span {
@@ -2481,4 +2408,86 @@ input.fader::-webkit-slider-thumb,
 .audio-log li {
   padding: 1px 0;
   color: var(--text);
+}
+
+/* --- Botones FX de la ruedita del filtro + SHIFT (en el mixer) ------------------ */
+.cfx-panel {
+  display: grid;
+  grid-template-columns: auto repeat(4, minmax(0, 1fr));
+  gap: 3px;
+  margin-top: 6px;
+  padding: 3px;
+  background: var(--well);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  --accent: var(--sync); /* violeta: los efectos son "del mixer", de los dos platos */
+}
+
+.cfx-panel button {
+  padding: 3px 2px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border-radius: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* El efecto elegido: encendido en violeta. */
+.cfx-btn[aria-pressed='true'] {
+  color: color-mix(in srgb, var(--accent) 80%, white);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 30%, #151a25), color-mix(in srgb, var(--accent) 14%, #11151e));
+  border-color: var(--accent);
+  box-shadow: 0 0 10px -2px color-mix(in srgb, var(--accent) 80%, transparent);
+}
+
+/* SHIFT: ámbar. Encendido si está enganchado en pantalla; borde si se mantiene en la mesa o el teclado. */
+.cfx-shift {
+  --accent: var(--cue);
+  color: var(--cue);
+  padding-inline: 6px !important;
+}
+
+.cfx-shift[aria-pressed='true'],
+.cfx-shift.held {
+  color: #1a1203;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cue) 80%, white), var(--cue));
+  border-color: var(--cue);
+  box-shadow: 0 0 12px -2px color-mix(in srgb, var(--cue) 85%, transparent);
+}
+
+/* Con SHIFT activo, los 4 botones muestran el otro banco: un borde ámbar lo recuerda. */
+.cfx-panel.shifted {
+  border-color: color-mix(in srgb, var(--cue) 60%, transparent);
+}
+
+/* --- Aprender botones (monitor MIDI) ---------------------------------------------- */
+.midi-learn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+
+.midi-learn select {
+  max-width: 100%;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 3px 6px;
+  font: inherit;
+}
+
+.midi-learn button.on {
+  color: #1a1203;
+  background: var(--cue);
+  border-color: var(--cue);
+  animation: sync-pulse 0.8s ease-in-out infinite alternate;
+}
+
+.midi-learn-msg {
+  color: var(--muted);
 }
