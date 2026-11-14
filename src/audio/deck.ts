@@ -438,6 +438,38 @@ export class Deck extends EventTarget {
     this.jumpAt(target, when);
   }
 
+  // --- Beat jump ------------------------------------------------------------
+  //
+  // Saltar X golpes adelante o atrás SIN perder el ritmo: como el salto es de
+  // golpes enteros, caes en la misma parte del golpe en que ibas. Sirve para
+  // alargar o acortar una parte de la canción mientras mezclas.
+
+  /** Salta `beats` golpes: positivo = adelante, negativo = atrás. */
+  beatJump(beats: number): void {
+    if (!this.loaded) return;
+    const delta = beats * this.beatLength;
+    const clamp = (t: number) => Math.max(0, Math.min(t, this.duration - 0.05));
+    // Primero, DÓNDE ESTAMOS (con el loop de ahora: ojo, si movemos antes el
+    // loop, la cuenta de "dónde estoy dentro del loop" saldría mal).
+    // Sonando, el salto ocurre en un instante concreto (`when`), sin hueco de silencio.
+    const when = this.ctx.currentTime + 0.03;
+    const here = this.playing ? this.positionAt(when) : this.position;
+    // Si hay un loop, se mueve con el salto (como en los equipos de DJ).
+    const loop = this.loop;
+    if (loop) {
+      const start = loop.start + delta;
+      const end = loop.end + delta;
+      this.loop = start >= 0 && end <= this.duration ? { start, end } : null;
+      this.emit('loop');
+    }
+    if (!this.playing) {
+      this.offset = clamp(here + delta);
+      this.emit('transport');
+      return;
+    }
+    this.jumpAt(clamp(here + delta), when);
+  }
+
   /** Borra un hot cue. */
   deleteHotCue(index: number): void {
     this.hotCues[index] = null;

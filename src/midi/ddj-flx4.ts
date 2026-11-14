@@ -84,9 +84,18 @@ function deck(letter: 'A' | 'B', ch: number, padCh: number): { bindings: MidiBin
     btn(0x4d, 'loop'),
     btn(0x51, 'loopHalf'),
     btn(0x53, 'loopDouble'),
-    // Modo de los pads: HOT CUE → nuestra página HOT CUES; PAD FX 1 → nuestra página STEMS
-    btn(0x1b, 'padPage.hotcues'),
-    btn(0x1e, 'padPage.stems'),
+    // Los 4 botones de modo de encima de los pads, de izquierda a derecha
+    // (en la mesa pone HOT CUE, PAD FX 1, BEAT JUMP y SAMPLER), eligen en la app:
+    //   1º → STEMS · 2º → HOT CUES · 3º → BEAT JUMP · 4º → SAMPLER
+    // Con SHIFT pulsado mandan otros números (0x69, 0x6B, 0x6D, 0x6F): hacen lo mismo.
+    btn(0x1b, 'padPage.stems'),
+    btn(0x1e, 'padPage.hotcues'),
+    btn(0x20, 'padPage.beatjump'),
+    btn(0x22, 'padPage.sampler'),
+    btn(0x69, 'padPage.stems'),
+    btn(0x6b, 'padPage.hotcues'),
+    btn(0x6d, 'padPage.beatjump'),
+    btn(0x6f, 'padPage.sampler'),
     // Plato (jog): tocar la parte de arriba, girar tocándola, girar por el borde
     btn(0x36, 'jogTouch'),
     { status: CC + ch, data1: 0x22, kind: 'jog', control: `${letter}.jogTop` },
@@ -116,9 +125,17 @@ function deck(letter: 'A' | 'B', ch: number, padCh: number): { bindings: MidiBin
     [`${letter}.cue`]: [light(0x0c)],
     [`${letter}.sync`]: [light(0x58)],
     [`${letter}.loop`]: [light(0x10), light(0x11)],
+    // Luz del botón del modo de pads elegido
+    [`${letter}.padPage.stems`]: [light(0x1b)],
+    [`${letter}.padPage.hotcues`]: [light(0x1e)],
+    [`${letter}.padPage.beatjump`]: [light(0x20)],
+    [`${letter}.padPage.sampler`]: [light(0x22)],
   };
-  // Luz de cada pad, en los dos modos que usamos (HOT CUE y PAD FX 1).
-  for (let i = 0; i < 8; i++) lights[`${letter}.pad${i + 1}`] = [light(i, NOTE + padCh), light(0x10 + i, NOTE + padCh)];
+  // Luz de cada pad. Cada modo de la mesa usa su tanda de números
+  // (0x00…, 0x10…, 0x20…, 0x30…): la mandamos a las 4 para que se vea en cualquiera.
+  for (let i = 0; i < 8; i++) {
+    lights[`${letter}.pad${i + 1}`] = [0x00, 0x10, 0x20, 0x30].map((base) => light(base + i, NOTE + padCh));
+  }
   return { bindings, lights };
 }
 

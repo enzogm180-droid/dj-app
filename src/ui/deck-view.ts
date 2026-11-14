@@ -8,6 +8,7 @@
 import type { Deck, StemName } from '../audio/deck';
 import type { Library } from '../library/library';
 import type { FxRack } from '../audio/fx';
+import { SAMPLES, type Sampler } from '../audio/sampler';
 import { registerControl, setLight } from '../midi/controls';
 import { createFxView } from './fx-view';
 import { Jog } from './jog';
@@ -23,6 +24,13 @@ const TEMPO_RANGES = [8, 16, 33, 50];
 
 /** Velocidad del SYNC: cuánto tempo cambia por segundo (en %). */
 const SYNC_SPEED = 2;
+
+/** Las 4 páginas de pads, en el orden de los botones de modo de la controladora. */
+const PAD_PAGES = ['stems', 'hotcues', 'beatjump', 'sampler'] as const;
+type PadPage = (typeof PAD_PAGES)[number];
+
+/** Saltos del BEAT JUMP, en golpes: fila de arriba hacia atrás, fila de abajo hacia adelante. */
+const BEAT_JUMPS = [-2, -4, -8, -16, 2, 4, 8, 16];
 
 /** Tamaños de loop, en golpes. */
 const LOOP_SIZES = [1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8, 16, 32];
@@ -89,6 +97,8 @@ export function createDeckView(
   /** Los efectos de este plato. */
   fx: FxRack,
   getLibrary: () => Library | null,
+  /** El sampler (compartido por los dos platos: los mismos 8 sonidos). */
+  sampler: Sampler,
 ): DeckView {
   root.classList.add('deck', `deck-${letter.toLowerCase()}`);
   root.setAttribute('aria-label', `Plato ${letter}`);
@@ -123,6 +133,8 @@ export function createDeckView(
       <div class="pad-tabs" role="group" aria-label="Qué hacen los pads del plato ${letter}">
         <button data-pad-page="stems" aria-pressed="true">STEMS</button>
         <button data-pad-page="hotcues" aria-pressed="false">HOT CUES</button>
+        <button data-pad-page="beatjump" aria-pressed="false">BEAT JUMP</button>
+        <button data-pad-page="sampler" aria-pressed="false">SAMPLER</button>
       </div>
 
       <div class="pads" data-page="stems" role="group" aria-label="Stems del plato ${letter}">
@@ -141,6 +153,21 @@ export function createDeckView(
           (color, i) =>
             `<button class="pad hotcue-delete" data-hotcue-delete="${i}" style="--hc: ${color}" disabled
               aria-label="Borrar hot cue ${i + 1}" title="Borra el hot cue ${i + 1}">✕ ${i + 1}</button>`,
+        ).join('')}
+      </div>
+
+      <div class="pads" data-page="beatjump" role="group" aria-label="Beat jump del plato ${letter}" hidden>
+        ${BEAT_JUMPS.map(
+          (beats) =>
+            `<button class="pad beatjump" data-jump="${beats}" disabled
+              aria-label="Saltar ${Math.abs(beats)} golpes ${beats < 0 ? 'atrás' : 'adelante'}">${beats < 0 ? '◀' : '▶'} ${Math.abs(beats)}</button>`,
+        ).join('')}
+      </div>
+
+      <div class="pads" data-page="sampler" role="group" aria-label="Sampler" hidden>
+        ${SAMPLES.map(
+          ({ name, color }, i) =>
+            `<button class="pad sample" data-sample="${i}" style="--pad: ${color}" aria-pressed="false">${name}</button>`,
         ).join('')}
       </div>
     </div>
@@ -372,12 +399,14 @@ export function createDeckView(
   loopDoubleBtn.addEventListener('click', () => changeSize(1));
   deck.addEventListener('loop', updateLoop);
 
-  // --- Páginas de pads: STEMS o HOT CUES ---------------------------------------
-  let padPage: 'stems' | 'hotcues' = 'stems';
+  // --- Páginas de pads: STEMS, HOT CUES, BEAT JUMP o SAMPLER ------------------
+  let padPage: PadPage = 'stems';
 
-  function showPadPage(page: 'stems' | 'hotcues'): void {
+  function showPadPage(page: PadPage): void {
     padPage = page;
     updatePadLights();
+    // En la controladora, se enciende el botón del modo elegido.
+    for (const p of PAD_PAGES) setLight(`${letter}.padPage.${p}`, p === page);
     for (const tab of root.querySelectorAll<HTMLButtonElement>('[data-pad-page]')) {
       tab.setAttribute('aria-pressed', String(tab.dataset.padPage === page));
     }
@@ -386,8 +415,24 @@ export function createDeckView(
     }
   }
   for (const tab of root.querySelectorAll<HTMLButtonElement>('[data-pad-page]')) {
-    tab.addEventListener('click', () => showPadPage(tab.dataset.padPage as 'stems' | 'hotcues'));
+    tab.addEventListener('click', () => showPadPage(tab.dataset.padPage as PadPage));
   }
+
+  // --- Beat jump -----------------------------------------------------------------
+  //  Fila de arriba: ◀ saltar atrás 2, 4, 8 o 16 golpes.
+  //  Fila de abajo:  ▶ saltar adelante 2, 4, 8 o 16 golpes.
+  const jumpBtns = [...root.querySelectorAll<HTMLButtonElement>('[data-jump]')];
+  jumpBtns.forEach((btn) => btn.addEventListener('click', () => deck.beatJump(Number(btn.dataset.jump))));
+  deck.addEventListener('loaded', () => jumpBtns.forEach((btn) => (btn.disabled = !deck.loaded)));
+
+  // --- Sampler -------------------------------------------------------------------
+  //  Cada pad lanza un sonido (bocina, sirena…). Mientras suena, el pad se ilumina.
+  const sampleBtns = [...root.querySelectorAll<HTMLButtonElement>('[data-sample]')];
+  sampleBtns.forEach((btn, i) => btn.addEventListener('click', () => void sampler.trigger(i)));
+  sampler.addEventListener('change', () => {
+    sampleBtns.forEach((btn, i) => btn.setAttribute('aria-pressed', String(sampler.isPlaying(i))));
+    if (padPage === 'sampler') updatePadLights();
+  });
 
   // --- Hot cues ------------------------------------------------------------------
   //  Fila de arriba:  vacío → guarda el punto (ajustado al golpe con L.AJUST);
@@ -413,16 +458,22 @@ export function createDeckView(
   // según la página que esté elegida:
   //   STEMS:     1-4 = Voces, Melodía, Bajo, Batería · 5 = Acapella · 6 = Instrumental
   //   HOT CUES:  1-4 = hot cues (guardar / saltar)  · 5-8 = borrar el de encima
+  //   BEAT JUMP: 1-4 = ◀ 2, 4, 8, 16 golpes         · 5-8 = ▶ 2, 4, 8, 16 golpes
+  //   SAMPLER:   1-8 = los 8 sonidos
   function padButton(n: number): HTMLButtonElement | null {
     if (padPage === 'hotcues') return n < 4 ? hotCueBtns[n] : (deleteBtns[n - 4] ?? null);
+    if (padPage === 'beatjump') return jumpBtns[n] ?? null;
+    if (padPage === 'sampler') return sampleBtns[n] ?? null;
     return [...pads, acapellaBtn, instrumentalBtn][n] ?? null;
   }
 
-  /** Luces de los pads de la mesa: encendido = stem sonando / hot cue guardado. */
+  /** Luces de los pads de la mesa: encendido = stem sonando / hot cue guardado / sonido sonando. */
   function updatePadLights(): void {
     for (let n = 0; n < 8; n++) {
       let on = false;
       if (padPage === 'hotcues') on = n < 4 && deck.hotCues[n] !== null;
+      else if (padPage === 'beatjump') on = deck.loaded; // todos encendidos: así se ve el modo
+      else if (padPage === 'sampler') on = sampler.isPlaying(n);
       else if (n < 4) on = deck.hasStems && deck.isStemOn(pads[n].dataset.stem as StemName);
       else if (n < 6) on = (n === 4 ? acapellaBtn : instrumentalBtn).classList.contains('active');
       setLight(`${letter}.pad${n + 1}`, on);
@@ -455,8 +506,9 @@ export function createDeckView(
   registerControl(`${letter}.loop`, clickOnPress(() => loopBtn));
   registerControl(`${letter}.loopHalf`, clickOnPress(() => loopHalfBtn));
   registerControl(`${letter}.loopDouble`, clickOnPress(() => loopDoubleBtn));
-  registerControl(`${letter}.padPage.hotcues`, { press: (down) => down && showPadPage('hotcues') });
-  registerControl(`${letter}.padPage.stems`, { press: (down) => down && showPadPage('stems') });
+  // Los 4 botones de modo de encima de los pads (en la FLX4: HOT CUE, PAD FX 1,
+  // BEAT JUMP y SAMPLER) eligen, por orden, STEMS, HOT CUES, BEAT JUMP y SAMPLER.
+  for (const p of PAD_PAGES) registerControl(`${letter}.padPage.${p}`, { press: (down) => down && showPadPage(p) });
   for (let n = 0; n < 8; n++) registerControl(`${letter}.pad${n + 1}`, clickOnPress(() => padButton(n)));
   registerControl(`${letter}.jogTouch`, { press: (down) => jog.midiTouch(down) });
   registerControl(`${letter}.jogTop`, { turn: (ticks) => jog.midiTurn(ticks) });

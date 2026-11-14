@@ -12,6 +12,7 @@ import './style.css';
 import { Deck, setupDecks } from './audio/deck';
 import { FxRack } from './audio/fx';
 import { Mixer } from './audio/mixer';
+import { Sampler } from './audio/sampler';
 import { createDeckView, deckSettings, type DeckView } from './ui/deck-view';
 import { createLibraryView } from './ui/library-view';
 import { createMidiView } from './ui/midi-view';
@@ -96,8 +97,10 @@ const libraryView = createLibraryView(document.getElementById('library')!, (trac
 });
 
 const getLibrary = () => libraryView.library;
-const viewA: DeckView = createDeckView(document.getElementById('deck-a')!, 'A', deckA, deckB, fxA, getLibrary);
-const viewB: DeckView = createDeckView(document.getElementById('deck-b')!, 'B', deckB, deckA, fxB, getLibrary);
+// Sampler: 8 sonidos compartidos por los dos platos, directos al master.
+const sampler = new Sampler(ctx, (node) => mixer.connectToMaster(node));
+const viewA: DeckView = createDeckView(document.getElementById('deck-a')!, 'A', deckA, deckB, fxA, getLibrary, sampler);
+const viewB: DeckView = createDeckView(document.getElementById('deck-b')!, 'B', deckB, deckA, fxB, getLibrary, sampler);
 createMixerView(document.getElementById('mixer')!, mixer, deckA, deckB);
 
 // Solo mientras desarrollamos (npm run dev): deja los platos a mano en la
