@@ -155,6 +155,14 @@ export class Mixer {
   }
 
   /** Volumen general, de 0 a 1. */
+  /**
+   * Conecta algo directo al master, sin pasar por ningún canal ni por el
+   * crossfader (lo usa el sampler: suena igual hagas lo que hagas con los faders).
+   */
+  connectToMaster(node: AudioNode): void {
+    node.connect(this.master);
+  }
+
   setMasterVolume(value: number): void {
     this.master.gain.setTargetAtTime(value * value, this.ctx.currentTime, 0.01);
   }

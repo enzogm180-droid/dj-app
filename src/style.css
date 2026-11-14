@@ -882,7 +882,7 @@ button:disabled {
 
 .pad-tabs {
   display: inline-grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(4, auto); /* STEMS · HOT CUES · BEAT JUMP · SAMPLER */
   margin-bottom: 8px;
 }
 
@@ -2381,4 +2381,30 @@ input.fader::-webkit-slider-thumb,
 .midi-log li {
   padding: 1px 0;
   color: color-mix(in srgb, var(--accent) 70%, var(--text));
+}
+
+/* --- Pads de BEAT JUMP y SAMPLER ------------------------------------------------ */
+/* Beat jump: atrás (fila de arriba) en ámbar, adelante (fila de abajo) en verde. */
+.pad.beatjump {
+  --pad: var(--cue);
+  font-variant-numeric: tabular-nums;
+}
+
+.pad.beatjump:nth-child(n + 5) {
+  --pad: var(--play);
+}
+
+/* Sampler: cada pad con el color de su sonido; mientras suena, se ilumina. */
+.pad.sample[aria-pressed='true'] {
+  color: #0b0d12;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--pad) 75%, white), var(--pad));
+  border-color: var(--pad);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.35),
+    0 0 14px -2px var(--pad);
+}
+
+/* Con 4 pestañas, el texto un pelín más pequeño para que quepan. */
+.pad-tabs button {
+  padding-inline: 8px;
 }
