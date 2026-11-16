@@ -6,6 +6,7 @@
  *
  * Al pulsarlo se abre un panel con todo lo que ha pasado (con la hora).
  * Si vuelve a cortarse el sonido, mira aquí y pásale a Claude lo que pone.
+ * (Para elegir altavoces y auriculares está el botón "🔊 Salidas": outputs-view.ts.)
  */
 import { audioHealth } from '../audio/health';
 

@@ -7,9 +7,32 @@
  *    Si tocas algo y sale "sin asignar", ese botón no está en el mapa
  *    (src/midi/ddj-flx4.ts) o tiene otro número: el monitor te dice cuál.
  */
-import { connectMidi, midiSupported, onMidiMessage, onMidiStatus } from '../midi/midi';
+import {
+  cancelLearn,
+  connectMidi,
+  forgetLearned,
+  learn,
+  learnedBindings,
+  midiSupported,
+  onMidiMessage,
+  onMidiStatus,
+} from '../midi/midi';
 
 const MAX_LINES = 14;
+
+/** Funciones que se pueden asignar a un botón de la mesa con "Aprender". */
+const LEARNABLE: { control: string; label: string }[] = [
+  { control: 'cfx.next', label: 'Botón FX (siguiente efecto; con SHIFT, el anterior) — SMART CFX' },
+  { control: 'cfx.1', label: 'FX 1 (con SHIFT: FX 5)' },
+  { control: 'cfx.2', label: 'FX 2 (con SHIFT: FX 6)' },
+  { control: 'cfx.3', label: 'FX 3 (con SHIFT: FX 7)' },
+  { control: 'cfx.4', label: 'FX 4 (con SHIFT: FX 8)' },
+  { control: 'shift', label: 'SHIFT' },
+  { control: 'A.headCue', label: 'Canal A: CUE de auriculares (pre-escucha)' },
+  { control: 'B.headCue', label: 'Canal B: CUE de auriculares (pre-escucha)' },
+  { control: 'A.syncOff', label: 'Plato A: desincronizar (volver al BPM original)' },
+  { control: 'B.syncOff', label: 'Plato B: desincronizar (volver al BPM original)' },
+];
 
 export function createMidiView(button: HTMLButtonElement, panel: HTMLElement): void {
   panel.classList.add('midi-panel');
@@ -17,11 +40,48 @@ export function createMidiView(button: HTMLButtonElement, panel: HTMLElement): v
   panel.innerHTML = `
     <div class="midi-status" data-el="status"></div>
     <p class="midi-help">Toca cualquier botón, fader o rueda de la mesa: aquí sale el mensaje y a qué control ha ido.</p>
+    <div class="midi-learn">
+      <span>Asignar un botón de la mesa a:</span>
+      <select data-el="learn-control" aria-label="Función a asignar">
+        ${LEARNABLE.map(({ control, label }) => `<option value="${control}">${label}</option>`).join('')}
+      </select>
+      <button class="small" data-el="learn">Aprender</button>
+      <button class="small" data-el="forget" title="Borra los botones aprendidos y vuelve al mapa de fábrica">Olvidar aprendidos</button>
+      <span class="midi-learn-msg" data-el="learn-msg"></span>
+    </div>
     <ol class="midi-log" data-el="log"></ol>
   `;
   const statusEl = panel.querySelector<HTMLElement>('[data-el="status"]')!;
   const log = panel.querySelector<HTMLOListElement>('[data-el="log"]')!;
+  const learnSelect = panel.querySelector<HTMLSelectElement>('[data-el="learn-control"]')!;
+  const learnBtn = panel.querySelector<HTMLButtonElement>('[data-el="learn"]')!;
+  const learnMsg = panel.querySelector<HTMLElement>('[data-el="learn-msg"]')!;
   let connected = false;
+
+  const showLearned = () => {
+    const n = learnedBindings().length;
+    learnMsg.textContent = n ? `${n} botón(es) aprendido(s).` : '';
+  };
+  showLearned();
+
+  learnBtn.addEventListener('click', async () => {
+    if (learnBtn.classList.contains('on')) {
+      cancelLearn(); // segundo clic = cancelar
+      return;
+    }
+    learnBtn.classList.add('on');
+    learnBtn.textContent = 'Cancelar';
+    learnMsg.textContent = 'Ahora pulsa el botón de la mesa…';
+    const hex = await learn(learnSelect.value);
+    learnBtn.classList.remove('on');
+    learnBtn.textContent = 'Aprender';
+    if (hex) learnMsg.textContent = `Hecho: ${hex} → ${learnSelect.selectedOptions[0].text}`;
+    else showLearned();
+  });
+  panel.querySelector('[data-el="forget"]')!.addEventListener('click', () => {
+    forgetLearned();
+    showLearned();
+  });
 
   if (!midiSupported()) {
     button.disabled = true;

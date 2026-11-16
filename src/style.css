@@ -1070,49 +1070,6 @@ button:disabled {
   min-width: 0;
 }
 
-/* Efectos: 3 filas */
-.fx {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.fx-row {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) minmax(60px, 90px);
-  gap: 6px;
-  align-items: center;
-}
-
-.fx-on {
-  padding: 3px 0;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.fx-row.on .fx-on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--bg);
-}
-
-.fx select {
-  min-width: 0;
-  background: var(--panel-2);
-  color: var(--text);
-  border: 1px solid #353a42;
-  border-radius: 5px;
-  padding: 3px 6px;
-  font: inherit;
-  font-size: 12px;
-}
-
-.fx input[type='range'] {
-  width: 100%;
-  margin: 0;
-  accent-color: var(--accent);
-}
-
 /* Pads y pestañas, más pequeños */
 .pad-pages {
   margin-top: 0;
@@ -1775,8 +1732,7 @@ button:disabled {
 .assist[aria-pressed='true'],
 .midi-btn.on,
 .mode button[aria-pressed='true'],
-.pad-tabs button[aria-pressed='true'],
-.fx-row.on .fx-on {
+.pad-tabs button[aria-pressed='true'] {
   color: color-mix(in srgb, var(--accent) 80%, white);
   background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 28%, #151a25), color-mix(in srgb, var(--accent) 14%, #11151e));
   border-color: var(--accent);
@@ -2035,28 +1991,6 @@ button:disabled {
   box-shadow: 0 0 12px -2px color-mix(in srgb, var(--loop) 85%, transparent);
 }
 
-/* --- Efectos ---------------------------------------------------------------------- */
-.fx select {
-  appearance: none;
-  background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237b8598' stroke-width='1.5'/%3E%3C/svg%3E")
-      no-repeat right 7px center,
-    linear-gradient(180deg, #19202d, #121722);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 3px 22px 3px 8px;
-  font-family: var(--font-display);
-  cursor: pointer;
-}
-
-.fx select:hover {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-}
-
-.fx select option {
-  background: var(--panel-2);
-}
-
 /* --- Faders (deslizadores) a medida ----------------------------------------------- */
 /*
  * Cada fader es:   ranura hundida  +  RELLENO de color hasta la tapa  +  tapa metálica
@@ -2207,13 +2141,6 @@ input.fader::-webkit-slider-thumb,
   box-shadow:
     0 2px 5px rgb(0 0 0 / 0.8),
     0 0 10px -2px rgb(255 255 255 / 0.35);
-}
-
-/* Efectos: faders pequeños */
-.fx input[type='range'] {
-  --thumb: 10px;
-  --groove: 3px;
-  height: 16px;
 }
 
 .xfader span {
@@ -2416,8 +2343,15 @@ input.fader::-webkit-slider-thumb,
 
 .topbar .audio-btn {
   margin-left: 8px;
-  margin-right: auto;
+  margin-right: 0;
   --accent: var(--play);
+}
+
+/* Botón "🔊 Salidas" (el último de la fila: empuja el resto a la derecha). */
+.topbar .outputs-btn {
+  margin-left: 8px;
+  margin-right: auto;
+  --accent: var(--cue);
 }
 
 /* El puntito de color: verde = bien, ámbar = hubo un aviso, rojo = parado. */
@@ -2480,5 +2414,289 @@ input.fader::-webkit-slider-thumb,
 
 .audio-log li {
   padding: 1px 0;
+  color: var(--text);
+}
+
+/* --- Botones FX de la ruedita del filtro + SHIFT (en el mixer) ------------------ */
+.cfx-panel {
+  display: grid;
+  grid-template-columns: auto repeat(4, minmax(0, 1fr));
+  gap: 3px;
+  margin-top: 6px;
+  padding: 3px;
+  background: var(--well);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  --accent: var(--sync); /* violeta: los efectos son "del mixer", de los dos platos */
+}
+
+.cfx-panel button {
+  padding: 3px 2px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border-radius: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* El efecto elegido: encendido en violeta. */
+.cfx-btn[aria-pressed='true'] {
+  color: color-mix(in srgb, var(--accent) 80%, white);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 30%, #151a25), color-mix(in srgb, var(--accent) 14%, #11151e));
+  border-color: var(--accent);
+  box-shadow: 0 0 10px -2px color-mix(in srgb, var(--accent) 80%, transparent);
+}
+
+/* SHIFT: ámbar. Encendido si está enganchado en pantalla; borde si se mantiene en la mesa o el teclado. */
+.cfx-shift {
+  --accent: var(--cue);
+  color: var(--cue);
+  padding-inline: 6px !important;
+}
+
+.cfx-shift[aria-pressed='true'],
+.cfx-shift.held {
+  color: #1a1203;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cue) 80%, white), var(--cue));
+  border-color: var(--cue);
+  box-shadow: 0 0 12px -2px color-mix(in srgb, var(--cue) 85%, transparent);
+}
+
+/* Con SHIFT activo, los 4 botones muestran el otro banco: un borde ámbar lo recuerda. */
+.cfx-panel.shifted {
+  border-color: color-mix(in srgb, var(--cue) 60%, transparent);
+}
+
+/* --- Aprender botones (monitor MIDI) ---------------------------------------------- */
+.midi-learn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+
+.midi-learn select {
+  max-width: 100%;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 3px 6px;
+  font: inherit;
+}
+
+.midi-learn button.on {
+  color: #1a1203;
+  background: var(--cue);
+  border-color: var(--cue);
+  animation: sync-pulse 0.8s ease-in-out infinite alternate;
+}
+
+.midi-learn-msg {
+  color: var(--muted);
+}
+
+/* --- Pestañas de géneros (encima de la lista, como las del navegador) ----------- */
+.genre-tabs {
+  display: flex;
+  gap: 2px;
+  margin: -2px -2px 6px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto; /* si hay muchas y no caben, se desplazan a los lados */
+  scrollbar-width: none;
+}
+
+.genre-tabs[hidden] {
+  display: none;
+}
+
+.genre-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 5px 12px 4px;
+  margin-bottom: -1px; /* la pestaña elegida "tapa" la línea de abajo */
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 9px 9px 0 0;
+  box-shadow: none;
+}
+
+.genre-tab:hover:not([aria-selected='true']) {
+  color: var(--text);
+  background: rgb(255 255 255 / 0.04);
+  border-color: transparent;
+}
+
+/* La pestaña elegida: unida al panel de abajo, con una línea de luz arriba. */
+.genre-tab[aria-selected='true'] {
+  color: var(--text);
+  background: var(--panel-2);
+  border-color: var(--line);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.genre-count {
+  min-width: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: var(--well);
+}
+
+.genre-tab[aria-selected='true'] .genre-count {
+  color: color-mix(in srgb, var(--accent) 85%, white);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Portátiles (1366 px): pestañas un poco más estrechas para que quepan todas. */
+@media (max-width: 1500px) {
+  .genre-tab {
+    gap: 4px;
+    padding: 4px 8px 3px;
+    font-size: 11px;
+  }
+
+  .genre-count {
+    min-width: 0;
+    padding: 0 5px;
+  }
+}
+
+/* --- Cascos: botón CUE de cada canal, fila de cascos y panel de salidas --------- */
+/* Cabecera del canal: la letra y, al lado, el botón de pre-escucha. */
+.strip-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.cue-phones {
+  padding: 1px 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  border-radius: 999px;
+  --accent: var(--cue);
+  color: color-mix(in srgb, var(--cue) 70%, var(--muted));
+}
+
+/* Pre-escucha encendida: ámbar, como el botón CUE de los platos. */
+.cue-phones[aria-pressed='true'] {
+  color: #1a1203;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cue) 80%, white), var(--cue));
+  border-color: var(--cue);
+  box-shadow: 0 0 12px -2px color-mix(in srgb, var(--cue) 85%, transparent);
+}
+
+/* Fila de cascos (debajo del master): volumen y mezcla CUE ↔ master. */
+.phones {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-size: 9.5px;
+  color: var(--muted);
+  --accent: var(--cue);
+}
+
+.phones input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  height: 16px;
+  --thumb: 10px;
+}
+
+/* La mezcla no es "más" hacia un lado: ranura de dos colores (CUE ámbar ↔ master violeta). */
+.phones input[data-el='phones-mix'] {
+  background: linear-gradient(to right, var(--cue), #c084fc) center / 100% 3px no-repeat;
+  filter: none;
+}
+
+.phones-icon {
+  font-size: 12px;
+}
+
+/* Panel del botón "🔊 Salidas": altavoces y auriculares. */
+.outputs-panel {
+  background: linear-gradient(180deg, #121722 0%, var(--panel) 60%);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  --accent: var(--cue);
+}
+
+.outputs-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.outputs-label {
+  flex: 0 0 230px;
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.outputs-row select {
+  flex: 0 1 420px;
+  min-width: 0;
+}
+
+.outputs-panel select {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 4px 8px;
+  font: inherit;
+}
+
+.outputs-foot {
+  display: flex;
+  margin-top: 4px;
+}
+
+.outputs-status {
+  margin: 4px 0 0;
+  color: var(--cue);
+}
+
+/* Aviso en rojo (p. ej. altavoces y cascos por el mismo sitio) con su botón para arreglarlo. */
+.outputs-warning {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  border-radius: 8px;
+}
+
+.outputs-warning[hidden] {
+  display: none;
+}
+
+.outputs-warning button {
+  --accent: var(--danger);
   color: var(--text);
 }

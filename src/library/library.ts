@@ -22,6 +22,16 @@ const STEMS_DIRNAME = '_stems';
 const ONLINE_LYRICS_FILENAME = 'letra-online.json';
 const LIBRARY_FILENAME = 'biblioteca.json';
 const USER_DATA_FILENAME = 'mis-datos.json';
+/** Los géneros (pestañas): lo escribe tools/preparador/clasificar_generos.py. */
+const GENRES_FILENAME = 'generos.json';
+
+/** Un género = una pestaña encima de la lista de canciones. */
+export interface Genre {
+  id: string;
+  name: string;
+  /** Las canciones de este género, por su huella (la carpeta de sus stems). */
+  songs: Set<string>;
+}
 
 /** Lo que guardamos en "_stems/mis-datos.json". */
 interface UserData {
@@ -71,11 +81,26 @@ export class Library {
   /** Se llama si falla un guardado (para avisarte en pantalla). */
   onSaveError: ((err: unknown) => void) | null = null;
 
-  private constructor(root: FileSystemDirectoryHandle, tracks: Track[], data: UserData, writable: boolean) {
+  /** Los géneros de la carpeta (vacío si aún no se han clasificado). */
+  readonly genres: Genre[];
+
+  private constructor(
+    root: FileSystemDirectoryHandle,
+    tracks: Track[],
+    data: UserData,
+    writable: boolean,
+    genres: Genre[],
+  ) {
     this.root = root;
     this.tracks = tracks;
     this.data = data;
     this.writable = writable;
+    this.genres = genres;
+  }
+
+  /** ¿Está esta canción en este género? (solo las canciones preparadas tienen género) */
+  inGenre(track: Track, genre: Genre): boolean {
+    return track.stems !== null && genre.songs.has(track.stems.folder);
   }
 
   get name(): string {
@@ -143,7 +168,7 @@ export class Library {
       });
     }
     tracks.sort((a, b) => a.title.localeCompare(b.title, 'es'));
-    return new Library(root, tracks, data, writable);
+    return new Library(root, tracks, data, writable, await readGenres(root));
   }
 
   /** Lee el archivo original de una canción. */
@@ -261,6 +286,21 @@ async function readUserData(root: FileSystemDirectoryHandle): Promise<UserData> 
     return { version: 1, hotCues: parsed.hotCues ?? {} };
   } catch {
     return { version: 1, hotCues: {} }; // aún no has guardado nada: empezamos de cero
+  }
+}
+
+/** Lee los géneros (pestañas). Si aún no se han clasificado, no hay pestañas: lista vacía. */
+async function readGenres(root: FileSystemDirectoryHandle): Promise<Genre[]> {
+  try {
+    const file = await getFile(root, `${STEMS_DIRNAME}/${GENRES_FILENAME}`);
+    const parsed = JSON.parse(await file.text());
+    return (parsed.generos ?? []).map((g: { id: string; nombre: string; canciones: string[] }) => ({
+      id: g.id,
+      name: g.nombre,
+      songs: new Set(g.canciones),
+    }));
+  } catch {
+    return [];
   }
 }
 

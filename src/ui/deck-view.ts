@@ -7,10 +7,8 @@
  */
 import type { Deck, StemName } from '../audio/deck';
 import type { Library } from '../library/library';
-import type { FxRack } from '../audio/fx';
 import { SAMPLES, type Sampler } from '../audio/sampler';
-import { registerControl, setLight } from '../midi/controls';
-import { createFxView } from './fx-view';
+import { isShift, onShift, registerControl, setLight } from '../midi/controls';
 import { Jog } from './jog';
 import { HOT_CUE_COLORS } from './stem-draw';
 import { Waveform } from './waveform';
@@ -94,8 +92,6 @@ export function createDeckView(
   deck: Deck,
   /** El otro plato: el que ya suena, al que nos sincronizamos con SYNC. */
   other: Deck,
-  /** Los efectos de este plato. */
-  fx: FxRack,
   getLibrary: () => Library | null,
   /** El sampler (compartido por los dos platos: los mismos 8 sonidos). */
   sampler: Sampler,
@@ -127,7 +123,6 @@ export function createDeckView(
 
     <div class="deck-body">
     <div class="deck-main">
-    <div class="fx" data-el="fx"></div>
 
     <div class="pad-pages">
       <div class="pad-tabs" role="group" aria-label="Qué hacen los pads del plato ${letter}">
@@ -226,7 +221,6 @@ export function createDeckView(
   const acapellaBtn = el<HTMLButtonElement>('acapella');
   const instrumentalBtn = el<HTMLButtonElement>('instrumental');
   const waveform = new Waveform(el<HTMLCanvasElement>('wave'));
-  createFxView(el('fx'), fx, letter);
   const jog = new Jog(el<HTMLCanvasElement>('jog'), deck, letter);
 
   function updatePlayButton(): void {
@@ -306,7 +300,20 @@ export function createDeckView(
     return options.reduce((a, b) => (Math.abs(Math.log(b / bpm)) < Math.abs(Math.log(a / bpm)) ? b : a));
   }
 
+  /**
+   * "Desincronizar" (SHIFT + SYNC): vuelve poco a poco al BPM ORIGINAL de la
+   * canción (tempo 0 %), igual de suave que el SYNC pero al revés.
+   */
+  function unsync(): void {
+    if (!deck.loaded) return;
+    const change = Math.abs(1 - deck.tempo) * 100;
+    if (change < 0.01) return; // ya está en su BPM original
+    const seconds = Math.min(8, Math.max(1, change / SYNC_SPEED));
+    deck.glideTempo(1, seconds * 1000);
+  }
+
   function sync(): void {
+    if (isShift()) return unsync(); // SHIFT + SYNC = desincronizar
     const target = syncTarget();
     if (target === null || deck.bpm === null) return;
     const rate = target / deck.bpm;
@@ -339,7 +346,13 @@ export function createDeckView(
 
   /** SYNC: se puede usar si los dos platos tienen BPM; se enciende si ya están igualados. */
   function updateSync(): void {
-    syncBtn.disabled = syncTarget() === null;
+    // Con SHIFT, el botón pasa a ser "OFF" (desincronizar = volver al BPM original).
+    const shift = isShift();
+    syncBtn.textContent = shift ? 'OFF' : 'SYNC';
+    syncBtn.title = shift
+      ? 'SHIFT + SYNC: vuelve poco a poco al BPM original de la canción'
+      : 'Iguala poco a poco el BPM al del otro plato';
+    syncBtn.disabled = shift ? !deck.loaded : syncTarget() === null;
     syncBtn.classList.toggle('on', !deck.isGliding && inSync());
     syncBtn.classList.toggle('gliding', deck.isGliding);
     setLight(`${letter}.sync`, !deck.isGliding && inSync());
@@ -495,7 +508,11 @@ export function createDeckView(
       else deck.cueUp();
     },
   });
-  registerControl(`${letter}.sync`, clickOnPress(() => syncBtn));
+  // SYNC (con SHIFT pulsado, desincroniza: ver sync()). Algunas controladoras
+  // mandan un mensaje distinto para SHIFT + SYNC: ese va directo a desincronizar.
+  registerControl(`${letter}.sync`, { press: (down) => down && (isShift() ? unsync() : !syncBtn.disabled && sync()) });
+  registerControl(`${letter}.syncOff`, { press: (down) => down && unsync() });
+  onShift(updateSync);
   // Fader de tempo: de 0 (un extremo) a 1 (el otro); el centro = 0 %.
   // Con una pequeña "zona muerta" en el centro: así el fader en medio da 0 % exacto.
   registerControl(`${letter}.tempo`, {

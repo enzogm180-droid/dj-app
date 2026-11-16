@@ -21,6 +21,7 @@ export function createLibraryView(
   root.classList.add('library');
   root.setAttribute('aria-label', 'Biblioteca');
   root.innerHTML = `
+    <div class="genre-tabs" data-el="tabs" role="tablist" aria-label="Géneros" hidden></div>
     <div class="library-bar">
       <button data-el="open">Abrir carpeta de música</button>
       <button data-el="reconnect" hidden></button>
@@ -46,8 +47,49 @@ export function createLibraryView(
   const info = el('info');
   const search = el<HTMLInputElement>('search');
   const rows = el<HTMLTableSectionElement>('rows');
+  const tabs = el('tabs');
 
   const view: { library: Library | null; refresh(): void } = { library: null, refresh: () => renderRows() };
+
+  // --- Pestañas de géneros ----------------------------------------------------------
+  // Encima de la lista, como las pestañas del navegador: "Todas", "Reggaetón",
+  // "Trap"… Al elegir una, la lista (y el buscador) solo enseñan ese género.
+  // Los géneros salen de "_stems/generos.json" (tools/preparador/clasificar_generos.py).
+  let activeGenre = loadActiveGenre();
+
+  function renderTabs(): void {
+    const library = view.library;
+    if (!library || !library.genres.length) {
+      tabs.hidden = true;
+      activeGenre = ALL;
+      return;
+    }
+    // Si la pestaña guardada ya no existe (p. ej. otra carpeta), volvemos a "Todas".
+    if (activeGenre !== ALL && !library.genres.some((g) => g.id === activeGenre)) activeGenre = ALL;
+    const options = [
+      { id: ALL, name: 'Todas', count: library.tracks.length },
+      ...library.genres.map((g) => ({ id: g.id, name: g.name, count: library.tracks.filter((t) => library.inGenre(t, g)).length })),
+    ];
+    tabs.hidden = false;
+    tabs.replaceChildren(
+      ...options.map(({ id, name, count }) => {
+        const tab = document.createElement('button');
+        tab.className = 'genre-tab';
+        tab.setAttribute('role', 'tab');
+        tab.setAttribute('aria-selected', String(id === activeGenre));
+        tab.innerHTML = `<span class="genre-name"></span><span class="genre-count">${count}</span>`;
+        tab.querySelector('.genre-name')!.textContent = name;
+        tab.addEventListener('click', () => {
+          activeGenre = id;
+          saveActiveGenre(id);
+          selected = 0;
+          renderTabs();
+          renderRows();
+        });
+        return tab;
+      }),
+    );
+  }
 
   // --- Canción elegida con la controladora --------------------------------------
   // La rueda del navegador de la mesa mueve una "selección" por la lista y los
@@ -123,6 +165,7 @@ export function createLibraryView(
     library.onSaveError = () => {
       info.textContent = `⚠ No se pudo guardar en "${library.name}". ¿Has quitado el pincho? Vuelve a abrir la carpeta.`;
     };
+    renderTabs();
     renderRows();
   }
 
@@ -130,8 +173,13 @@ export function createLibraryView(
     const library = view.library;
     if (!library) return;
     const query = search.value.trim().toLowerCase();
+    const genre = library.genres.find((g) => g.id === activeGenre) ?? null;
     const visible = sortTracks(
-      library.tracks.filter((t) => `${t.title} ${t.artist} ${t.path}`.toLowerCase().includes(query)),
+      library.tracks.filter(
+        (t) =>
+          (!genre || library.inGenre(t, genre)) && // solo las de la pestaña elegida
+          `${t.title} ${t.artist} ${t.path}`.toLowerCase().includes(query),
+      ),
       order,
     );
     showOrder();
@@ -209,6 +257,28 @@ interface SortOrder {
 }
 
 const ORDER_STORAGE_KEY = 'dj-app:orden-biblioteca';
+
+// --- Pestaña de género recordada -----------------------------------------------------
+
+/** La pestaña "Todas" (no es un género). */
+const ALL = 'todas';
+const GENRE_STORAGE_KEY = 'dj-app:pestana-genero';
+
+function loadActiveGenre(): string {
+  try {
+    return localStorage.getItem(GENRE_STORAGE_KEY) ?? ALL;
+  } catch {
+    return ALL;
+  }
+}
+
+function saveActiveGenre(id: string): void {
+  try {
+    localStorage.setItem(GENRE_STORAGE_KEY, id);
+  } catch {
+    // sin almacenamiento: no se recuerda, no pasa nada
+  }
+}
 
 /**
  * Devuelve una copia ordenada (no cambia la lista original).

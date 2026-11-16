@@ -51,6 +51,8 @@ export interface Knob {
    * 1 = tope derecho. Es lo que manda una rueda de verdad de la controladora.
    */
   setPosition(position: number): void;
+  /** Cambia el nombre de la rueda (p. ej. "Filtro" → "Eco") y vuelve a pintar su texto. */
+  setLabel(label: string): void;
 }
 
 const START = -135; // grados: dónde empieza el recorrido (abajo a la izquierda)
@@ -189,5 +191,9 @@ export function createKnob(o: KnobOptions): Knob {
     },
     set,
     setPosition: (position) => set(valueAt(position)),
+    setLabel(label) {
+      el.querySelector('.knob-label')!.textContent = label;
+      render(); // el texto de debajo puede depender del nombre (p. ej. "LP 50%" o "◀ 50%")
+    },
   };
 }
