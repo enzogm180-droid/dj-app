@@ -2491,3 +2491,79 @@ input.fader::-webkit-slider-thumb,
 .midi-learn-msg {
   color: var(--muted);
 }
+
+/* --- Pestañas de géneros (encima de la lista, como las del navegador) ----------- */
+.genre-tabs {
+  display: flex;
+  gap: 2px;
+  margin: -2px -2px 6px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto; /* si hay muchas y no caben, se desplazan a los lados */
+  scrollbar-width: none;
+}
+
+.genre-tabs[hidden] {
+  display: none;
+}
+
+.genre-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 5px 12px 4px;
+  margin-bottom: -1px; /* la pestaña elegida "tapa" la línea de abajo */
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 9px 9px 0 0;
+  box-shadow: none;
+}
+
+.genre-tab:hover:not([aria-selected='true']) {
+  color: var(--text);
+  background: rgb(255 255 255 / 0.04);
+  border-color: transparent;
+}
+
+/* La pestaña elegida: unida al panel de abajo, con una línea de luz arriba. */
+.genre-tab[aria-selected='true'] {
+  color: var(--text);
+  background: var(--panel-2);
+  border-color: var(--line);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.genre-count {
+  min-width: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: var(--well);
+}
+
+.genre-tab[aria-selected='true'] .genre-count {
+  color: color-mix(in srgb, var(--accent) 85%, white);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Portátiles (1366 px): pestañas un poco más estrechas para que quepan todas. */
+@media (max-width: 1500px) {
+  .genre-tab {
+    gap: 4px;
+    padding: 4px 8px 3px;
+    font-size: 11px;
+  }
+
+  .genre-count {
+    min-width: 0;
+    padding: 0 5px;
+  }
+}
