@@ -79,6 +79,8 @@ function deck(letter: 'A' | 'B', ch: number, padCh: number): { bindings: MidiBin
     // algunos botones: SHIFT + SYNC llega como 0x5C → desincronizar.
     { status: NOTE + ch, data1: 0x3f, kind: 'button', control: 'shift' },
     btn(0x5c, 'syncOff'),
+    // Botón CUE de AURICULARES de cada canal (pre-escucha en los cascos)
+    btn(0x54, 'headCue'),
     // Tempo (fader largo). En Pioneer, ARRIBA = más lento (−) y ABAJO = más rápido (+).
     // ⚠ A comprobar con la mesa: si sale al revés, poner `true` (invertir).
     fader(0x00, 'tempo', false),
@@ -129,6 +131,7 @@ function deck(letter: 'A' | 'B', ch: number, padCh: number): { bindings: MidiBin
     [`${letter}.cue`]: [light(0x0c)],
     [`${letter}.sync`]: [light(0x58)],
     [`${letter}.loop`]: [light(0x10), light(0x11)],
+    [`${letter}.headCue`]: [light(0x54)],
     // Luz del botón del modo de pads elegido
     [`${letter}.padPage.stems`]: [light(0x1b)],
     [`${letter}.padPage.hotcues`]: [light(0x1e)],

@@ -73,11 +73,15 @@ function bindSlider(input: HTMLInputElement, defaultValue: number, apply: (value
   update(); // aplica el valor inicial
 }
 
-function channelStrip(letter: string, channel: Channel, deck: Deck): HTMLElement {
+function channelStrip(letter: string, channel: Channel, deck: Deck, mixer: Mixer): HTMLElement {
   const strip = document.createElement('div');
   strip.className = `strip strip-${letter.toLowerCase()}`;
   strip.innerHTML = `
-    <span class="strip-letter">${letter}</span>
+    <div class="strip-head">
+      <span class="strip-letter">${letter}</span>
+      <button class="cue-phones" data-el="cue-phones" aria-pressed="false"
+        title="Pre-escucha: este canal suena en tus cascos (aunque su fader esté abajo)">🎧 CUE</button>
+    </div>
     <div class="strip-body">
       <div class="strip-knobs">
         <div class="gain-module" data-el="gain"></div>
@@ -233,6 +237,18 @@ function channelStrip(letter: string, channel: Channel, deck: Deck): HTMLElement
   registerControl(`${letter}.eqLow`, eqOrStem('low', 'beat'));
   registerControl(`${letter}.filter`, { value: (p) => filterKnob.setPosition(p) });
   registerControl(`${letter}.volume`, { value: (p) => moveSlider(volume, p) });
+
+  // --- Pre-escucha (CUE de auriculares) ---------------------------------------------
+  // Encendido: este canal suena en los cascos aunque su fader esté abajo.
+  const cueBtn = $<HTMLButtonElement>('[data-el="cue-phones"]');
+  const ch = letter.toLowerCase() as 'a' | 'b';
+  const toggleCue = () => {
+    mixer.setCue(ch, !channel.cueOn);
+    cueBtn.setAttribute('aria-pressed', String(channel.cueOn));
+    setLight(`${letter}.headCue`, channel.cueOn); // la luz del botón CUE de auriculares de la mesa
+  };
+  cueBtn.addEventListener('click', toggleCue);
+  registerControl(`${letter}.headCue`, { press: (down) => down && toggleCue() });
   return strip;
 }
 
@@ -250,6 +266,16 @@ export function createMixerView(root: HTMLElement, mixer: Mixer, deckA: Deck, de
       <span>Master</span>
       <input type="range" data-el="master" min="0" max="1" step="0.01" value="0.9" aria-label="Volumen master" />
     </label>
+    <div class="phones" role="group" aria-label="Cascos">
+      <span class="phones-icon" title="Cascos">🎧</span>
+      <input type="range" data-el="phones-volume" min="0" max="1" step="0.01" value="0.8"
+        aria-label="Volumen de los cascos" title="Volumen de los cascos" />
+      <span class="phones-label">CUE</span>
+      <input type="range" data-el="phones-mix" min="0" max="1" step="0.01" value="0"
+        aria-label="Mezcla de los cascos: a la izquierda lo pre-escuchado (CUE), a la derecha el master"
+        title="Mezcla de los cascos: izquierda = lo pre-escuchado (CUE), derecha = el master" />
+      <span class="phones-label">MST</span>
+    </div>
     <div class="xfader">
       <span>A</span>
       <input type="range" data-el="xfader" min="0" max="1" step="0.01" value="0.5" aria-label="Crossfader" />
@@ -258,9 +284,16 @@ export function createMixerView(root: HTMLElement, mixer: Mixer, deckA: Deck, de
   `;
 
   const strips = root.querySelector('.strips')!;
-  strips.append(channelStrip('A', mixer.a, deckA), channelStrip('B', mixer.b, deckB));
+  strips.append(channelStrip('A', mixer.a, deckA, mixer), channelStrip('B', mixer.b, deckB, mixer));
 
   bindSlider(root.querySelector<HTMLInputElement>('[data-el="master"]')!, 0.9, (v) => mixer.setMasterVolume(v));
+  // Cascos: volumen y mezcla (CUE ↔ master). Doble clic = valor inicial.
+  const phonesVolume = root.querySelector<HTMLInputElement>('[data-el="phones-volume"]')!;
+  const phonesMix = root.querySelector<HTMLInputElement>('[data-el="phones-mix"]')!;
+  bindSlider(phonesVolume, 0.8, (v) => mixer.setHeadphonesVolume(v));
+  bindSlider(phonesMix, 0, (v) => mixer.setHeadphonesMix(v));
+  registerControl('phones.volume', { value: (p) => moveSlider(phonesVolume, p) });
+  registerControl('phones.mix', { value: (p) => moveSlider(phonesMix, p) });
   const xfader = root.querySelector<HTMLInputElement>('[data-el="xfader"]')!;
   bindSlider(xfader, 0.5, (v) => mixer.setCrossfader(v));
   registerControl('xfader', { value: (p) => moveSlider(xfader, p) });

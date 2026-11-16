@@ -14,6 +14,8 @@ import { Mixer } from './audio/mixer';
 import { Sampler } from './audio/sampler';
 import { watchAudio } from './audio/health';
 import { createAudioView } from './ui/audio-view';
+import { AudioOutputs } from './audio/outputs';
+import { createOutputsView } from './ui/outputs-view';
 import { createDeckView, deckSettings, type DeckView } from './ui/deck-view';
 import { createLibraryView } from './ui/library-view';
 import { createMidiView } from './ui/midi-view';
@@ -33,10 +35,12 @@ app.innerHTML = `
     </button>
     <button class="assist midi-btn" id="midi" title="Conectar la controladora (y abrir/cerrar el monitor MIDI)">MIDI</button>
     <button class="assist audio-btn" id="audio-status" title="Estado del audio y registro de problemas">Audio OK</button>
+    <button class="assist outputs-btn" id="outputs-btn" title="Elegir por dónde sale el sonido: altavoces y auriculares">🔊 Salidas</button>
     <span class="hint">A: Q play · W cue — B: P play · O cue — doble clic en un control = valor inicial</span>
   </header>
   <section id="midi-panel" aria-label="Monitor MIDI"></section>
   <section id="audio-panel" aria-label="Registro de audio"></section>
+  <section id="outputs-panel" aria-label="Salidas de audio"></section>
   <section class="lanes" aria-label="Ondas de los dos platos">
     <div class="lane"><span class="lane-letter">A</span><canvas id="lane-a"></canvas></div>
     <div class="lane"><span class="lane-letter">B</span><canvas id="lane-b"></canvas></div>
@@ -63,6 +67,10 @@ app.innerHTML = `
 const ctx = new AudioContext();
 await setupDecks(ctx); // prepara el key lock (mantener el tono al cambiar el tempo)
 const mixer = new Mixer(ctx);
+// Por dónde sale el sonido: master (altavoces) y cascos (pre-escucha). Se aplica
+// lo que elegiste la última vez (si no, todo por la salida de Windows).
+const outputs = new AudioOutputs(ctx, mixer);
+await outputs.apply();
 // Plato → canal del mixer. Los efectos están en la ruedita del filtro de cada
 // canal (src/audio/cfx.ts); los que van al ritmo necesitan saber cuánto dura
 // un golpe AHORA (BPM de la canción × tempo).
@@ -130,6 +138,7 @@ const masterMeter = ctx.createAnalyser();
 mixer.tap(masterMeter);
 const reactivateAudio = () => {
   void ctx.resume();
+  void outputs.apply(); // por si la tarjeta de sonido se había desconectado
   deckA.resetAudio();
   deckB.resetAudio();
 };
@@ -140,6 +149,8 @@ watchAudio({
   rebuild: reactivateAudio,
 });
 createAudioView(document.getElementById('audio-status') as HTMLButtonElement, document.getElementById('audio-panel')!, reactivateAudio);
+// Botón "🔊 Salidas": por dónde sale la mesa (altavoces) y por dónde los auriculares.
+createOutputsView(document.getElementById('outputs-btn') as HTMLButtonElement, document.getElementById('outputs-panel')!, outputs);
 
 // Controladora MIDI (botón "MIDI" de arriba + monitor).
 createMidiView(document.getElementById('midi') as HTMLButtonElement, document.getElementById('midi-panel')!);

@@ -3,9 +3,18 @@
  *
  * Cada plato entra en su propio CANAL, y los canales se juntan en el MASTER:
  *
- *   Plato A → Gain → [Bajos → Medios → Agudos] → Filtro → Volumen A → Crossfader A ┐
- *                                                                                   ├→ Master
- *   Plato B → Gain → [Bajos → Medios → Agudos] → Filtro → Volumen B → Crossfader B ┘
+ *   Plato A → Gain → [Bajos → Medios → Agudos] → Filtro ─┬→ Volumen A → Crossfader A ┐
+ *                                                        └→ CUE A ───────────┐       ├→ Master → altavoces
+ *   Plato B → Gain → [Bajos → Medios → Agudos] → Filtro ─┬→ Volumen B → Crossfader B ┘   │
+ *                                                        └→ CUE B ───────────┤           │
+ *                                                                            ▼           ▼
+ *                                                      CASCOS = mezcla de (CUE) y (master)
+ *
+ * PRE-ESCUCHA (CUE de auriculares): con el botón CUE de un canal, ese canal
+ * suena en los CASCOS aunque su fader esté abajo (se coge ANTES del fader).
+ * Así preparas la siguiente canción sin que la oiga el público. La rueda
+ * "mezcla" de los cascos decide cuánto oyes de lo pre-escuchado y cuánto del master.
+ * Por dónde sale cada cosa (altavoces / cascos) lo decide outputs.ts.
  *
  * GAIN (ganancia): iguala el volumen de canciones grabadas más fuertes o más
  * flojas, ANTES de todo lo demás. Así el fader de volumen de las dos queda
@@ -38,9 +47,13 @@ export class Channel {
   private readonly fader: GainNode;
   /** Lo controla el crossfader (no lo toques directamente). */
   readonly xfade: GainNode;
+  /** Envío a los cascos (pre-escucha): 1 = CUE encendido, 0 = apagado. */
+  private readonly cueSend: GainNode;
+  /** ¿Está la pre-escucha (CUE de auriculares) de este canal encendida? */
+  cueOn = false;
   private readonly ctx: AudioContext;
 
-  constructor(ctx: AudioContext, output: AudioNode) {
+  constructor(ctx: AudioContext, output: AudioNode, cueBus: AudioNode) {
     this.ctx = ctx;
     this.input = ctx.createGain();
 
@@ -70,6 +83,18 @@ export class Channel {
     // Conectamos la cadena: entrada → bajos → medios → agudos → filtro/CFX → volumen → crossfader → salida
     this.input.connect(low).connect(mid).connect(high).connect(this.cfx.input);
     this.cfx.output.connect(this.fader).connect(this.xfade).connect(output);
+
+    // Pre-escucha: se coge ANTES del fader, así se oye en los cascos aunque el
+    // fader esté abajo (que es justo cuando la necesitas).
+    this.cueSend = ctx.createGain();
+    this.cueSend.gain.value = 0;
+    this.cfx.output.connect(this.cueSend).connect(cueBus);
+  }
+
+  /** Enciende o apaga la pre-escucha de este canal en los cascos. */
+  setCue(on: boolean): void {
+    this.cueOn = on;
+    this.cueSend.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.01);
   }
 
   /** Qué hace la ruedita del filtro (filtro, eco, espacio…). */
@@ -114,16 +139,77 @@ export class Channel {
 export class Mixer {
   readonly a: Channel;
   readonly b: Channel;
+  /** Suma de los dos canales (y el sampler), ANTES del volumen master. */
+  private readonly mainSum: GainNode;
   private readonly master: GainNode;
+  /** Lo que sale hacia los altavoces (ya con el volumen master). Lo conecta outputs.ts. */
+  readonly masterOut: GainNode;
+  /** Lo que sale hacia los cascos. Lo conecta outputs.ts. */
+  readonly headphonesOut: GainNode;
+  /** Suma de los canales con CUE encendido. */
+  private readonly cueBus: GainNode;
+  /** Cuánto de lo pre-escuchado y cuánto del master llega a los cascos. */
+  private readonly hpCue: GainNode;
+  private readonly hpMaster: GainNode;
+  private hpMix = 0; // empieza del todo en CUE: solo lo pre-escuchado
   private readonly ctx: AudioContext;
 
   constructor(ctx: AudioContext) {
     this.ctx = ctx;
+    this.mainSum = ctx.createGain();
     this.master = ctx.createGain();
-    this.master.connect(ctx.destination);
-    this.a = new Channel(ctx, this.master);
-    this.b = new Channel(ctx, this.master);
+    this.mainSum.connect(this.master);
+    // Pieza aparte para la salida: outputs.ts la conecta y desconecta al cambiar
+    // de salida sin tocar lo demás (p. ej. el medidor del vigilante de audio).
+    this.masterOut = ctx.createGain();
+    this.master.connect(this.masterOut);
+
+    // Cascos = (canales con CUE) × mezcla + (master) × (1 − mezcla), y su volumen.
+    this.cueBus = ctx.createGain();
+    this.hpCue = ctx.createGain();
+    this.hpMaster = ctx.createGain();
+    this.headphonesOut = ctx.createGain();
+    this.headphonesOut.gain.value = 0.64; // volumen de cascos al 80 %
+    this.cueBus.connect(this.hpCue).connect(this.headphonesOut);
+    this.mainSum.connect(this.hpMaster).connect(this.headphonesOut);
+
+    this.a = new Channel(ctx, this.mainSum, this.cueBus);
+    this.b = new Channel(ctx, this.mainSum, this.cueBus);
     this.setCrossfader(0.5);
+    this.applyHeadphonesMix();
+  }
+
+  // --- Cascos (pre-escucha) ------------------------------------------------------
+
+  /** CUE de auriculares de un canal. */
+  setCue(channel: 'a' | 'b', on: boolean): void {
+    this[channel].setCue(on);
+    this.applyHeadphonesMix();
+  }
+
+  /** Volumen de los cascos, de 0 a 1 (al cuadrado, como los faders). */
+  setHeadphonesVolume(value: number): void {
+    this.headphonesOut.gain.setTargetAtTime(value * value, this.ctx.currentTime, 0.01);
+  }
+
+  /** Rueda MEZCLA de los cascos: 0 = solo lo pre-escuchado (CUE), 1 = solo el master. */
+  setHeadphonesMix(value: number): void {
+    this.hpMix = value;
+    this.applyHeadphonesMix();
+  }
+
+  /**
+   * Como en una mesa de verdad: en los cascos suena SOLO lo que tiene CUE
+   * encendido, más la cantidad de master que pida la rueda MEZCLA.
+   * (Antes, sin ningún CUE, mandábamos el master a los cascos: confundía,
+   * porque la canción sonaba en los cascos aunque no la pre-escucharas.)
+   * Curva de potencia constante, como el crossfader.
+   */
+  private applyHeadphonesMix(): void {
+    const mix = this.hpMix;
+    const now = this.ctx.currentTime;
+    this.hpCue.gain.setTargetAtTime(Math.cos((mix * Math.PI) / 2), now, 0.01);
+    this.hpMaster.gain.setTargetAtTime(Math.sin((mix * Math.PI) / 2), now, 0.01);
   }
 
   /**
@@ -151,7 +237,7 @@ export class Mixer {
    * crossfader (lo usa el sampler: suena igual hagas lo que hagas con los faders).
    */
   connectToMaster(node: AudioNode): void {
-    node.connect(this.master);
+    node.connect(this.mainSum);
   }
 
   /** Conecta un "medidor" a la salida master (para vigilar lo que sale). */

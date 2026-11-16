@@ -28,6 +28,8 @@ const LEARNABLE: { control: string; label: string }[] = [
   { control: 'cfx.3', label: 'FX 3 (con SHIFT: FX 7)' },
   { control: 'cfx.4', label: 'FX 4 (con SHIFT: FX 8)' },
   { control: 'shift', label: 'SHIFT' },
+  { control: 'A.headCue', label: 'Canal A: CUE de auriculares (pre-escucha)' },
+  { control: 'B.headCue', label: 'Canal B: CUE de auriculares (pre-escucha)' },
   { control: 'A.syncOff', label: 'Plato A: desincronizar (volver al BPM original)' },
   { control: 'B.syncOff', label: 'Plato B: desincronizar (volver al BPM original)' },
 ];
