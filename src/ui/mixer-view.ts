@@ -237,6 +237,16 @@ function channelStrip(letter: string, channel: Channel, deck: Deck, mixer: Mixer
   registerControl(`${letter}.eqLow`, eqOrStem('low', 'beat'));
   registerControl(`${letter}.filter`, { value: (p) => filterKnob.setPosition(p) });
   registerControl(`${letter}.volume`, { value: (p) => moveSlider(volume, p) });
+  // Botón de la mesa que cambia las ruedas de este canal: EQ ⇄ STEMS (como
+  // pulsar los botones EQ / STEMS de la pantalla). Solo pasa a STEMS si la
+  // canción cargada trae stems; si no, se queda en EQ.
+  registerControl(`${letter}.eqStemsToggle`, {
+    press: (down) => {
+      if (!down) return; // solo al pulsar, no al soltar
+      if (mode === 'eq' && deck.hasStems) setMode('stems');
+      else setMode('eq');
+    },
+  });
 
   // --- Pre-escucha (CUE de auriculares) ---------------------------------------------
   // Encendido: este canal suena en los cascos aunque su fader esté abajo.
@@ -286,7 +296,11 @@ export function createMixerView(root: HTMLElement, mixer: Mixer, deckA: Deck, de
   const strips = root.querySelector('.strips')!;
   strips.append(channelStrip('A', mixer.a, deckA, mixer), channelStrip('B', mixer.b, deckB, mixer));
 
-  bindSlider(root.querySelector<HTMLInputElement>('[data-el="master"]')!, 0.9, (v) => mixer.setMasterVolume(v));
+  const master = root.querySelector<HTMLInputElement>('[data-el="master"]')!;
+  bindSlider(master, 0.9, (v) => mixer.setMasterVolume(v));
+  // La rueda MASTER LEVEL de la mesa mueve este fader de la pantalla
+  // (en la mesa es una ruedita y aquí un fader, pero los dos van de 0 a 1).
+  registerControl('master', { value: (p) => moveSlider(master, p) });
   // Cascos: volumen y mezcla (CUE ↔ master). Doble clic = valor inicial.
   const phonesVolume = root.querySelector<HTMLInputElement>('[data-el="phones-volume"]')!;
   const phonesMix = root.querySelector<HTMLInputElement>('[data-el="phones-mix"]')!;

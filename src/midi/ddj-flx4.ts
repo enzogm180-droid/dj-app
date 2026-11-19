@@ -158,6 +158,15 @@ export const DDJ_FLX4: ControllerMap = {
     // Centro de la mesa (canal 6)
     { status: CC + 6, data1: 0x1f, kind: 'fader', control: 'xfader' },
     { status: CC + 6, data1: 0x40, kind: 'relative', control: 'browse' }, // rueda del navegador
+    // Ruedas de volumen del centro (comprobadas con la mesa en el monitor MIDI).
+    // Son de alta precisión: el número fino (+0x20: 0x28, 0x2C, 0x2D) se apunta solo.
+    { status: CC + 6, data1: 0x08, kind: 'fader', control: 'master' }, // MASTER LEVEL
+    { status: CC + 6, data1: 0x0c, kind: 'fader', control: 'phones.mix' }, // HEADPHONES MIX (CUE ↔ MASTER)
+    { status: CC + 6, data1: 0x0d, kind: 'fader', control: 'phones.volume' }, // HEADPHONES LEVEL
+    // Botones que cambian las ruedas del medio de cada canal entre EQ y STEMS
+    // (comprobados con la mesa: llegan como 94 4A y 94 4B, canal 4).
+    { status: NOTE + 4, data1: 0x4a, kind: 'button', control: 'A.eqStemsToggle' },
+    { status: NOTE + 4, data1: 0x4b, kind: 'button', control: 'B.eqStemsToggle' },
   ],
   lights: { ...a.lights, ...b.lights },
 };
