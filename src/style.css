@@ -1,47 +1,49 @@
 /* ==================================================================================
- * PALETA "CLUB NOCTURNO"
+ * PALETA "MINIMALISTA"
  * Colores en un solo sitio: si quieres cambiar el aspecto, empieza por aquí.
  *
- *   Fondo negro azulado · plato A en CIAN · plato B en MAGENTA
- *   PLAY verde neón · CUE ámbar · SYNC violeta · peligro/quitar en rojo coral
+ *   Negro grafito · plato A en BLANCO · plato B en GRIS
+ *   Un solo color fuerte: el ROJO ANARANJADO del PLAY (y la raya de reproducción).
+ *   Lo encendido se pinta en blanco con letra negra; nada de brillos de neón.
  *
  * Truco: cada plato (y su canal del mixer) redefine --accent con SU color
  * (ver "ESTÉTICA" al final), así todo lo de dentro se tiñe solo.
  * ================================================================================== */
 :root {
-  /* Fondos, de más oscuro a más claro */
-  --bg: #07090d;
-  --panel: #0f131b;
-  --panel-2: #161b26;
-  --panel-3: #1e2433;
-  --well: #05070b; /* "huecos" hundidos: ondas, pantallas, buscador */
-  --line: #232a3a; /* bordes */
-  --line-soft: #181d29;
+  /* Fondos, de más oscuro a más claro (grises neutros, sin tono azul) */
+  --bg: #08080a;
+  --panel: #101013;
+  --panel-2: #17171b;
+  --panel-3: #222227;
+  --well: #060607; /* "huecos" hundidos: ondas, pantallas, buscador */
+  --line: #26262c; /* bordes */
+  --line-soft: #1b1b20;
 
   /* Textos */
-  --text: #e6ebf4;
-  --muted: #7b8598;
+  --text: #f1f1f3;
+  --muted: #85858d;
 
   /* Colores de cada plato */
-  --deck-a: #22d3ee;
-  --deck-b: #f472b6;
+  --deck-a: #f4f4f5;
+  --deck-b: #a1a1aa;
   --accent: var(--deck-a);
 
   /* Botones con significado */
-  --play: #4ade80;
-  --cue: #fbbf24;
-  --sync: #a78bfa;
-  --danger: #fb7185;
+  --play: #ff4b2b; /* el único color fuerte de la app */
+  --cue: #e9b44c; /* ámbar suave: puntos CUE y SHIFT */
+  --sync: #f4f4f5;
+  --danger: #ff6b5b;
+  --ok: #4ade80; /* solo para el puntito "Audio OK" */
 
-  --playhead: #ffffff;
-  /* Colores de cada stem en las ondas. */
-  --stem-vocals: #c084fc;
-  --stem-other: #38bdf8;
-  --stem-drums: #e2e8f0;
-  --stem-bass: #fb7185;
-  --wave-main: #5eead4; /* canción sin stems */
-  --bass-mark: #fb923c; /* rectangulitos de cada boom */
-  --loop: #34d399; /* zona del loop */
+  --playhead: var(--play);
+  /* Colores de cada stem en las ondas (suaves: informan sin chillar). */
+  --stem-vocals: #b9a6f5;
+  --stem-other: #8cc8ec;
+  --stem-drums: #e4e4e7;
+  --stem-bass: #f09a8e;
+  --wave-main: #d4d4d8; /* canción sin stems */
+  --bass-mark: #71717a; /* rectangulitos de cada boom */
+  --loop: #e4e4e7; /* zona del loop */
 
   /* Letras: Bahnschrift viene con Windows (estilo de pantalla de equipo de DJ).
      Nada de fuentes de internet: la app tiene que funcionar sin conexión. */
@@ -2699,4 +2701,477 @@ input.fader::-webkit-slider-thumb,
 .outputs-warning button {
   --accent: var(--danger);
   color: var(--text);
+}
+
+/* ==================================================================================
+ * ESTÉTICA "MINIMALISTA" (acabados finales)
+ * Va lo ÚLTIMO, así que manda sobre "Club nocturno" de arriba. La idea:
+ *   - Blanco y negro, con relieve suave (paneles y botones con una luz arriba).
+ *   - Letra con cuerpo: números grandes en Bahnschrift, etiquetas en MAYÚSCULAS.
+ *   - Nada de halos de neón. Lo ENCENDIDO = fondo blanco y letra negra.
+ *   - Un solo color fuerte: el rojo del PLAY (y la raya de reproducción).
+ * ================================================================================== */
+
+/* --- Base: fondo liso, sin los focos de color de antes -------------------------- */
+body {
+  background: var(--bg);
+}
+
+::selection {
+  background: rgb(255 255 255 / 0.25);
+}
+
+/* --- Paneles: gris muy oscuro, una luz finita arriba y sombra debajo ------------- */
+.deck,
+.mixer,
+.lanes,
+.library,
+.midi-panel,
+.audio-panel,
+.outputs-panel {
+  background: linear-gradient(180deg, #131316 0%, #0f0f12 100%);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.04),
+    0 10px 28px -12px rgb(0 0 0 / 0.8);
+}
+
+.mixer {
+  background: linear-gradient(180deg, #111114, #0c0c0e);
+}
+
+/* Fuera la luz de color de arriba de cada plato. */
+.deck::before,
+.deck::after {
+  display: none;
+}
+
+/* --- Barra de arriba ------------------------------------------------------------ */
+.topbar h1 {
+  background: none;
+  color: var(--text);
+  letter-spacing: 0.32em;
+  font-weight: 700;
+}
+
+/* La primera letra del nombre, en el color del PLAY: un toque de marca. */
+.topbar h1::first-letter {
+  color: var(--play);
+}
+
+.topbar .assist,
+.topbar .midi-btn {
+  border-radius: 4px;
+}
+
+/* Los botones de arriba, siempre en una sola línea. */
+.topbar button {
+  white-space: nowrap;
+}
+
+/* --- Botones: gris con relieve suave, letra con cuerpo ---------------------------- */
+.load,
+button {
+  background: linear-gradient(180deg, #1c1c21 0%, #151518 100%);
+  border: 1px solid #2c2c32;
+  border-radius: 4px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    0 1px 2px rgb(0 0 0 / 0.6);
+}
+
+.load:hover,
+button:hover:not(:disabled) {
+  border-color: #4a4a52;
+  background: linear-gradient(180deg, #232329 0%, #19191d 100%);
+}
+
+/* "Encendido" genérico: blanco con letra negra, sin halo. */
+.assist[aria-pressed='true'],
+.midi-btn.on,
+.mode button[aria-pressed='true'],
+.pad-tabs button[aria-pressed='true'],
+.loop-tabs button[aria-pressed='true'],
+.loop-row button.on,
+.cfx-btn[aria-pressed='true'] {
+  color: #0a0a0b;
+  background: linear-gradient(180deg, #ffffff, #dcdce0);
+  border-color: #ffffff;
+  box-shadow: inset 0 -1px 0 rgb(0 0 0 / 0.15);
+  text-shadow: none;
+}
+
+/* Pestañas segmentadas (STEMS/HOT CUES, EQ/STEMS, L.AJUST/L.PERS) */
+.pad-tabs,
+.mode,
+.loop-tabs {
+  border-radius: 5px;
+}
+
+.pad-tabs button,
+.mode button,
+.loop-tabs button {
+  border-radius: 3px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* --- Cabecera del plato: letra, título y números con cuerpo ---------------------- */
+.deck-letter {
+  color: #0a0a0b;
+  background: linear-gradient(180deg, #ffffff, var(--accent));
+  border-radius: 4px;
+  box-shadow: inset 0 -1px 0 rgb(0 0 0 / 0.2);
+  font-weight: 700;
+}
+
+/* El B, gris oscuro con la letra clara (así A y B se distinguen de un vistazo). */
+.deck-b .deck-letter {
+  color: #f4f4f5;
+  background: linear-gradient(180deg, #34343b, #26262c);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
+}
+
+.track-title {
+  font-size: 15px;
+  letter-spacing: 0.01em;
+}
+
+.badge {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  letter-spacing: 0.1em;
+}
+
+.bpm {
+  font-weight: 700;
+  font-size: 28px;
+  letter-spacing: -0.01em;
+}
+
+/* Tempo cambiado: subrayado en rojo (en vez de cambiar de color). */
+.bpm.changed {
+  color: var(--text);
+  text-shadow: none;
+  text-decoration: underline 2px var(--play);
+  text-underline-offset: 4px;
+}
+
+.track-time {
+  font-weight: 600;
+}
+
+.remaining {
+  color: var(--text);
+}
+
+/* --- Ondas: la letra A/B como en la cabecera ------------------------------------- */
+.lane-letter {
+  color: #0a0a0b;
+  background: var(--accent);
+  border: none;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.lane:nth-child(2) .lane-letter {
+  color: var(--deck-b);
+  background: #26262c;
+}
+
+.legend {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10.5px;
+}
+
+/* --- Transporte: CUE · PLAY · SYNC ---------------------------------------------- */
+.play {
+  color: var(--text);
+  border: 1px solid #34343b;
+  background: radial-gradient(circle at 50% 30%, #26262c, #141417 75%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 2px 6px rgb(0 0 0 / 0.6);
+}
+
+/* PLAY sonando: el rojo, el único color fuerte. */
+.play.on {
+  color: #ffffff;
+  border-color: var(--play);
+  background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--play) 80%, white), var(--play) 70%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.3),
+    0 2px 8px rgb(0 0 0 / 0.6);
+}
+
+.cue,
+.sync {
+  border-radius: 4px;
+  color: var(--text);
+  border-color: #34343b;
+}
+
+.cue.on,
+.sync.on {
+  color: #0a0a0b;
+  background: linear-gradient(180deg, #ffffff, #dcdce0);
+  border-color: #ffffff;
+  box-shadow: none;
+}
+
+/* SYNC ajustando poco a poco: parpadeo gris suave. */
+.sync.gliding {
+  border-color: #ffffff;
+  animation: mini-pulse 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes mini-pulse {
+  from {
+    background: #151518;
+  }
+  to {
+    background: #3a3a41;
+  }
+}
+
+/* --- Pads: relieve de goma, sin halos ------------------------------------------- */
+.pad {
+  border-radius: 4px;
+  color: var(--text);
+  background: linear-gradient(180deg, #1c1c21, #141417);
+  border: 1px solid #2c2c32;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    0 1px 2px rgb(0 0 0 / 0.5);
+}
+
+/* Stem sonando: borde y un tinte suave del color de su stem (el de las ondas). */
+.pad[data-stem][aria-pressed='true'] {
+  color: #ffffff;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--pad) 22%, #1c1c21), color-mix(in srgb, var(--pad) 12%, #141417));
+  border-color: color-mix(in srgb, var(--pad) 75%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
+}
+
+.pad.muted {
+  color: var(--danger);
+  background: linear-gradient(180deg, #1a1414, #131010);
+  border-color: color-mix(in srgb, var(--danger) 40%, #2c2c32);
+}
+
+.mode-pad.active {
+  color: #0a0a0b;
+  background: linear-gradient(180deg, #ffffff, #dcdce0);
+  border-color: #ffffff;
+  box-shadow: none;
+}
+
+/* Hot cues y sampler: conservan su color (sirve para reconocerlos), pero sin halo. */
+.pad.hotcue.set,
+.pad.sample[aria-pressed='true'] {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.3);
+}
+
+/* --- Faders: sin brillo, tapas metálicas con raya negra -------------------------- */
+input[type='range']:not(:disabled) {
+  filter: none;
+}
+
+input[type='range']::-webkit-slider-thumb {
+  border: 1px solid #000;
+  border-radius: 2px;
+  background:
+    linear-gradient(90deg, transparent 42%, #111 42%, #111 58%, transparent 58%),
+    linear-gradient(180deg, #f4f4f5, #a1a1aa);
+  box-shadow: 0 2px 5px rgb(0 0 0 / 0.75);
+}
+
+input.fader::-webkit-slider-thumb,
+.tempo input[type='range']::-webkit-slider-thumb {
+  background:
+    linear-gradient(180deg, transparent 42%, #111 42%, #111 58%, transparent 58%),
+    linear-gradient(90deg, #a1a1aa, #f4f4f5 50%, #a1a1aa);
+}
+
+.tempo output {
+  color: var(--text);
+}
+
+/* Master: relleno blanco hasta la tapa. */
+.master input[type='range'] {
+  --fill: #f4f4f5;
+  background: linear-gradient(to right, #f4f4f5 var(--at-b), var(--well) var(--at-b)) center / 100% var(--groove) no-repeat;
+}
+
+/* Crossfader: ranura gris; la tapa dice dónde está. */
+.xfader input[type='range'] {
+  background: linear-gradient(to right, #3a3a41, #3a3a41) center / 100% var(--groove) no-repeat;
+}
+
+.xfader input[type='range']::-webkit-slider-thumb {
+  background:
+    linear-gradient(90deg, transparent 42%, #111 42%, #111 58%, transparent 58%),
+    linear-gradient(180deg, #f4f4f5, #a1a1aa);
+  box-shadow: 0 2px 5px rgb(0 0 0 / 0.8);
+}
+
+/* --- Mixer ------------------------------------------------------------------------ */
+.strip-letter {
+  color: var(--accent);
+  text-shadow: none;
+  font-weight: 700;
+}
+
+/* --- Ruedas: cuerpo gris y valor en blanco, sin brillo --------------------------- */
+.knob-body {
+  fill: #222227;
+  stroke: #000;
+}
+
+.knob-dial:hover .knob-body,
+.knob-dial.dragging .knob-body {
+  fill: #2c2c32;
+}
+
+.knob-track {
+  stroke: #26262c;
+}
+
+.knob-value,
+.gain-module .knob-value {
+  stroke: var(--text);
+  filter: none;
+}
+
+.knob.killed .knob-value,
+.knob.killed .knob-pointer {
+  stroke: var(--danger);
+  filter: none;
+}
+
+.knob-label {
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+
+.knob-output {
+  font-weight: 600;
+}
+
+/* --- Lista de canciones ------------------------------------------------------------ */
+.library-bar input[type='search'] {
+  border-radius: 4px;
+}
+
+.library-bar input[type='search']:focus {
+  border-color: #6b6b73;
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.6);
+}
+
+.library th {
+  background: #111114;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+
+.library .bpm-cell {
+  font-weight: 700;
+}
+
+/* Canción elegida: fondo gris y una raya roja a la izquierda. */
+.library tbody tr.selected {
+  background: #1c1c21;
+  box-shadow: inset 3px 0 0 var(--play);
+}
+
+.load-buttons button {
+  border-radius: 4px;
+}
+
+.load-buttons button:hover:not(:disabled) {
+  color: #0a0a0b;
+  box-shadow: none;
+}
+
+/* Pestañas de géneros: la elegida, con raya blanca arriba y el número en blanco. */
+.genre-tab {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border-radius: 4px 4px 0 0;
+}
+
+.genre-tab[aria-selected='true'] {
+  color: var(--text);
+  box-shadow: inset 0 2px 0 var(--text);
+}
+
+.genre-tab[aria-selected='true'] .genre-count {
+  color: #0a0a0b;
+  background: var(--text);
+}
+
+/* --- Efectos (CFX), SHIFT, cascos y avisos ------------------------------------- */
+.cfx-panel {
+  --accent: var(--text);
+  border-radius: 5px;
+}
+
+.cfx-panel button {
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.cfx-shift[aria-pressed='true'],
+.cfx-shift.held {
+  box-shadow: none;
+}
+
+.cue-phones {
+  border-radius: 3px;
+}
+
+.cue-phones[aria-pressed='true'] {
+  color: #0a0a0b;
+  background: linear-gradient(180deg, #ffffff, #dcdce0);
+  border-color: #ffffff;
+  box-shadow: none;
+}
+
+.phones {
+  --accent: var(--text);
+}
+
+.phones input[data-el='phones-mix'] {
+  background: linear-gradient(to right, #6b6b73, #f4f4f5) center / 100% 3px no-repeat;
+}
+
+/* "Audio OK": el puntito sigue siendo verde/ámbar/rojo (es un aviso, no decoración). */
+.topbar .audio-btn {
+  --accent: var(--ok);
+}
+
+.topbar .audio-btn[data-status='aviso'] {
+  --accent: var(--cue);
+}
+
+.topbar .audio-btn[data-status='parado'] {
+  --accent: var(--danger);
+}
+
+.audio-btn::before {
+  box-shadow: none;
+}
+
+.audio-btn[data-status='parado'],
+.midi-learn button.on {
+  animation: mini-pulse 0.8s ease-in-out infinite alternate;
 }

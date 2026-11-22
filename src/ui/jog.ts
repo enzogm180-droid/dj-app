@@ -166,9 +166,7 @@ export class Jog {
     if (duration > 0) {
       g.save();
       g.strokeStyle = accent;
-      g.shadowColor = accent;
-      g.shadowBlur = 8 * ratio;
-      g.lineCap = 'round';
+      g.lineCap = 'round'; // sin brillo: estilo minimalista
       g.beginPath();
       g.arc(cx, cy, R - ring / 2, top, top + Math.max(0.001, this.deck.position / duration) * Math.PI * 2);
       g.stroke();
@@ -177,8 +175,6 @@ export class Jog {
       const cueAngle = top + (this.deck.cuePoint / duration) * Math.PI * 2;
       g.save();
       g.fillStyle = css.getPropertyValue('--cue');
-      g.shadowColor = g.fillStyle;
-      g.shadowBlur = 6 * ratio;
       g.beginPath();
       g.arc(cx + Math.cos(cueAngle) * (R - ring / 2), cy + Math.sin(cueAngle) * (R - ring / 2), ring * 0.6, 0, Math.PI * 2);
       g.fill();
@@ -187,8 +183,8 @@ export class Jog {
 
     // El disco: negro con un degradado (más claro si tienes la mano encima).
     const body = g.createRadialGradient(cx, cy - disc * 0.3, disc * 0.1, cx, cy, disc);
-    body.addColorStop(0, this.touching ? '#2a3244' : '#1c2230');
-    body.addColorStop(1, this.touching ? '#141925' : '#0a0d13');
+    body.addColorStop(0, this.touching ? '#2e2e34' : '#202024');
+    body.addColorStop(1, this.touching ? '#161619' : '#0b0b0d');
     g.fillStyle = body;
     g.beginPath();
     g.arc(cx, cy, disc, 0, Math.PI * 2);
@@ -231,14 +227,10 @@ export class Jog {
       labelFill.addColorStop(0.35, accent);
       labelFill.addColorStop(1, accent);
     } else {
-      labelFill.addColorStop(0, '#2c3446');
-      labelFill.addColorStop(1, '#1a202d');
+      labelFill.addColorStop(0, '#2c2c32');
+      labelFill.addColorStop(1, '#19191d');
     }
     g.save();
-    if (this.deck.isPlaying) {
-      g.shadowColor = accent;
-      g.shadowBlur = 14 * ratio;
-    }
     g.fillStyle = labelFill;
     g.beginPath();
     g.arc(cx, cy, label, 0, Math.PI * 2);
