@@ -23,15 +23,17 @@ const MAX_LINES = 14;
 /** Funciones que se pueden asignar a un botón de la mesa con "Aprender". */
 const LEARNABLE: { control: string; label: string }[] = [
   { control: 'cfx.next', label: 'Botón FX (siguiente efecto; con SHIFT, el anterior) — SMART CFX' },
-  { control: 'cfx.1', label: 'FX 1 (con SHIFT: FX 5)' },
-  { control: 'cfx.2', label: 'FX 2 (con SHIFT: FX 6)' },
-  { control: 'cfx.3', label: 'FX 3 (con SHIFT: FX 7)' },
-  { control: 'cfx.4', label: 'FX 4 (con SHIFT: FX 8)' },
+  { control: 'cfx.1', label: 'FX 1: Filtro' },
+  { control: 'cfx.2', label: 'FX 2: Eco' },
+  { control: 'cfx.3', label: 'FX 3: Espacio' },
+  { control: 'cfx.4', label: 'FX 4: Gate' },
   { control: 'shift', label: 'SHIFT' },
   { control: 'A.headCue', label: 'Canal A: CUE de auriculares (pre-escucha)' },
   { control: 'B.headCue', label: 'Canal B: CUE de auriculares (pre-escucha)' },
   { control: 'A.syncOff', label: 'Plato A: desincronizar (volver al BPM original)' },
   { control: 'B.syncOff', label: 'Plato B: desincronizar (volver al BPM original)' },
+  { control: 'A.cueStart', label: 'Plato A: volver al principio (SHIFT + CUE)' },
+  { control: 'B.cueStart', label: 'Plato B: volver al principio (SHIFT + CUE)' },
 ];
 
 export function createMidiView(button: HTMLButtonElement, panel: HTMLElement): void {

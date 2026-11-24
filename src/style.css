@@ -280,9 +280,13 @@ body {
   color: #f1a7aa;
 }
 
-/* Acapella / Instrumental: ocupan media fila cada uno. */
+/* Fila de abajo de STEMS (Vocal eco, Vocal reverb, Acapella, Instrumental):
+   cada uno del tamaño de un pad normal. */
 .mode-pad {
-  grid-column: span 2;
+  grid-column: span 1;
+  font-size: 0.78em; /* "Instrumental" es largo: así cabe en un pad */
+  letter-spacing: 0.02em;
+  line-height: 1.15;
   background: var(--panel-2);
   border-color: #353a42;
 }

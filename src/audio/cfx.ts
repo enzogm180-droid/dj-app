@@ -7,8 +7,8 @@
  *   Centro = apagado. Cuanto más giras (a un lado u otro), más efecto.
  *   Izquierda = versión "oscura" (quita agudos), derecha = "brillante" (quita graves).
  *
- *   Banco 1:  FILTRO · ECO · ESPACIO · JET
- *   Banco 2 (con SHIFT):  RUIDO · GATE · PHASER · CRUSH
+ *   En uso:  FILTRO · ECO · ESPACIO · GATE
+ *   (JET · RUIDO · PHASER · CRUSH siguen aquí, pero ya no se eligen desde la app.)
  *
  * Cómo está montado (todo dentro del canal, entre el EQ y el fader):
  *
@@ -30,12 +30,14 @@
  * (El wah-wah de los antiguos efectos del plato se quitó: hoy casi no se usa.)
  */
 export const CFX_TYPES = [
+  // Los 4 primeros son los que salen en los botones de FX.
   { id: 'filtro', label: 'Filtro' },
   { id: 'eco', label: 'Eco' },
   { id: 'espacio', label: 'Espacio' },
+  { id: 'gate', label: 'Gate' },
+  // Estos siguen programados, pero ya no se eligen desde la app.
   { id: 'jet', label: 'Jet' },
   { id: 'ruido', label: 'Ruido' },
-  { id: 'gate', label: 'Gate' },
   { id: 'phaser', label: 'Phaser' },
   { id: 'crush', label: 'Crush' },
 ] as const;
@@ -60,8 +62,10 @@ export class ColorFx {
   private readonly highpass: BiquadFilterNode;
   private readonly dry: GainNode;
   private readonly gate: GainNode;
-  private readonly gateLfo: OscillatorNode;
-  private readonly gateDepth: GainNode;
+  /** Cuándo (reloj de audio) cae el siguiente golpe de la canción; null si no suena. */
+  private readonly getNextBeat: () => number | null;
+  /** ¿Está el GATE cortando ahora? */
+  private gateRunning = false;
 
   private readonly echoSend: GainNode;
   private readonly echoDelay: DelayNode;
@@ -88,9 +92,10 @@ export class ColorFx {
   private type: CfxType = 'filtro';
   private value = 0;
 
-  constructor(ctx: AudioContext, getBeatSeconds: () => number) {
+  constructor(ctx: AudioContext, getBeatSeconds: () => number, getNextBeat: () => number | null = () => null) {
     this.ctx = ctx;
     this.getBeatSeconds = getBeatSeconds;
+    this.getNextBeat = getNextBeat;
     this.input = ctx.createGain();
     this.output = ctx.createGain();
 
@@ -111,13 +116,9 @@ export class ColorFx {
     this.dry = ctx.createGain();
     this.highpass.connect(this.dry).connect(this.gate);
 
-    // GATE: un oscilador cuadrado abre y cierra el volumen al ritmo.
-    this.gateLfo = ctx.createOscillator();
-    this.gateLfo.type = 'square';
-    this.gateDepth = ctx.createGain();
-    this.gateDepth.gain.value = 0;
-    this.gateLfo.connect(this.gateDepth).connect(this.gate.gain);
-    this.gateLfo.start();
+    // GATE: abre y cierra el volumen AL RITMO de la canción (ver scheduleGate).
+    // Cada 25 ms miramos qué cortes tocan en los próximos 0,2 s y los programamos.
+    setInterval(() => this.scheduleGate(), 25);
 
     // ECO: repeticiones al ritmo (cada 3/4 de golpe), cada vez más flojas.
     this.echoSend = ctx.createGain();
@@ -279,11 +280,74 @@ export class ColorFx {
     this.noiseFilter.type = dark ? 'lowpass' : 'highpass';
     to(this.noiseFilter.frequency, dark ? expLerp(8000, 300, a) : expLerp(300, 9000, a), ctx);
 
-    // Gate: corta el sonido al ritmo. Izquierda = en corcheas, derecha = en semicorcheas.
-    // El volumen oscila entre 1 y (1 - a): "gate" = gain + oscilador × profundidad.
-    const gateOn = type === 'gate' && a > 0;
-    to(this.gateLfo.frequency, (dark ? 2 : 4) / beat, ctx, 0.05);
-    to(this.gateDepth.gain, gateOn ? a / 2 : 0, ctx);
-    to(this.gate.gain, gateOn ? 1 - a / 2 : 1, ctx);
+    // Gate: lo programa scheduleGate (cada 25 ms). Aquí solo lo avisamos ya
+    // para que responda al instante al mover la rueda.
+    this.scheduleGate();
+  }
+
+  // --- GATE ---------------------------------------------------------------------
+  //
+  // Corta el sonido a trocitos AL RITMO de la canción: suena, silencio, suena,
+  // silencio… Los cortes caen justo en los golpes (no van "a su aire").
+  //
+  //  - Cuanto más giras, MÁS PROFUNDO corta (al 50 % ya es silencio total entre trozos)
+  //    y MÁS RÁPIDO va:
+  //       derecha:    corcheas (2 por golpe) → semicorcheas (4) → fusas (8)
+  //       izquierda:  negras (1 por golpe)   → corcheas (2)     → semicorcheas (4)
+  //  - Cada trozo se abre y se cierra en unos milisegundos (no de golpe): así
+  //    corta seco pero sin "clics".
+  //  - Si la canción no tiene BPM o no suena, va a su ritmo (sin cuadrar).
+
+  private gateAnchor = 0; // para cuando no hay golpes: un punto de referencia cualquiera
+
+  private scheduleGate(): void {
+    const ctx = this.ctx;
+    const g = this.gate.gain;
+    const now = ctx.currentTime;
+    const v = this.value;
+    const a = Math.abs(v);
+    if (this.type !== 'gate' || a === 0) {
+      if (this.gateRunning) {
+        // Apagado: volvemos a dejar pasar todo, suavemente.
+        g.cancelAndHoldAtTime(now);
+        g.setTargetAtTime(1, now, 0.01);
+        this.gateRunning = false;
+      }
+      return;
+    }
+    const beat = Math.max(0.2, Math.min(2, this.getBeatSeconds()));
+    // Velocidad: en tres escalones según lo girada que esté la rueda.
+    const level = a < 0.3 ? 0 : a < 0.55 ? 1 : 2;
+    const perBeat = (v > 0 ? [2, 4, 8] : [1, 2, 4])[level];
+    const step = beat / perBeat;
+    // Profundidad: cuánto baja el volumen en el hueco (1 = silencio total).
+    const floor = 1 - Math.min(1, a * 2);
+    // Qué parte de cada trozo suena: cuanto más rápido, algo más (si no, casi no se oye).
+    const duty = perBeat >= 8 ? 0.6 : 0.5;
+    const attack = 0.003; // 3 ms para abrir
+    const release = Math.min(0.012, step * 0.2); // hasta 12 ms para cerrar
+
+    // Los cortes cuadran con los golpes de la canción (si los sabemos).
+    const nextBeat = this.getNextBeat();
+    if (nextBeat === null && !this.gateRunning) this.gateAnchor = now;
+    const anchor = nextBeat ?? this.gateAnchor;
+    // El trozo que está sonando ahora empezó en t (≤ ahora).
+    let t = anchor - Math.ceil((anchor - now) / step) * step;
+    if (t > now) t -= step;
+
+    g.cancelAndHoldAtTime(now);
+    for (; t < now + 0.2; t += step) {
+      const off = t + step * duty;
+      if (off <= now) continue; // este trozo ya se cerró
+      if (t >= now) {
+        g.setValueAtTime(floor, t);
+        g.linearRampToValueAtTime(1, t + attack);
+      } else {
+        g.linearRampToValueAtTime(1, now + attack); // estamos dentro de un trozo abierto
+      }
+      g.setValueAtTime(1, off);
+      g.linearRampToValueAtTime(floor, off + release);
+    }
+    this.gateRunning = true;
   }
 }

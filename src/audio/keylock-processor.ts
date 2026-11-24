@@ -55,6 +55,8 @@ class KeylockProcessor extends AudioWorkletProcessor {
   private maxBuffered = 0;
   private pitch = 1;
   private started = false;
+  /** Bloques procesados (para avisar del retraso de vez en cuando). */
+  private blocks = 0;
   /** Para no inundar la app de avisos: como mucho uno de cada tipo cada 5 s. */
   private lastReport: Record<string, number> = {};
 
@@ -111,6 +113,11 @@ class KeylockProcessor extends AudioWorkletProcessor {
         out.receive(out.frameCount - (this.prime + BLOCK * 8));
         this.report('recorte', 'se acumulaba retraso en el key lock');
       }
+
+      // Cada ~90 ms contamos a la app cuánto sonido hay esperando aquí dentro:
+      // es un RETRASO (lo que entra ahora sale un poco más tarde). La asistencia
+      // de golpe lo usa para cuadrar dos platos que tengan retrasos distintos.
+      if (++this.blocks % 32 === 0) this.port.postMessage({ type: 'retraso', detail: String(out.frameCount) });
 
       // Salida: si hay suficiente sonido procesado, lo sacamos; si no, silencio.
       if (!this.started && out.frameCount >= this.prime) this.started = true;

@@ -80,6 +80,11 @@ export class Deck extends EventTarget {
   /** Todas las capas se juntan aquí antes de pasar por el key lock. */
   private readonly bus: GainNode;
   private keylock!: AudioWorkletNode;
+  /**
+   * Retraso del key lock en segundos (lo que tarda el sonido en atravesarlo).
+   * Cambia un poco con el tiempo; nos lo cuenta el propio key lock.
+   */
+  private keylockDelay = 0;
   /** A dónde va el sonido del plato (los efectos y el mixer). */
   private readonly output: AudioNode;
   /** Nombre del plato para el registro de audio ("A" o "B"). */
@@ -141,6 +146,109 @@ export class Deck extends EventTarget {
     this.bus = ctx.createGain();
     this.output = output;
     this.buildKeylock();
+    this.buildVocalFx();
+  }
+
+  // --- VOCAL ECO y VOCAL REVERB ------------------------------------------------
+  //
+  // Efectos SOLO para la voz (el stem de voces):
+  //
+  //  - VOCAL ECO: un eco MUY marcado, al ritmo (cada 3/4 de golpe), que salta
+  //    de un altavoz a otro (izquierda, derecha, izquierda…) y tarda en apagarse.
+  //    Cada repetición suena un poco más "de radio" (sin graves ni agudos), así
+  //    se distingue de la voz de verdad.
+  //  - VOCAL REVERB: la voz con una sala grande.
+  //
+  //   stem de voces ─┬─→ (normal) ────────────────────────────────────────┐
+  //                  ├─→ envío eco ─→ izq ⇄ der (rebota, cada vez menos) ─┼─→ bus del plato
+  //                  └─→ envío reverb ─→ sala ─→ filtro ──────────────────┘
+  //
+  // Encender/apagar solo abre o cierra el ENVÍO: al apagar, las repeticiones que
+  // ya estaban sonando se van apagando solas (la "cola"), sin cortes bruscos.
+
+  private vocalEchoSend!: GainNode;
+  private vocalEchoLeft!: DelayNode;
+  private vocalEchoRight!: DelayNode;
+  private vocalReverbSend!: GainNode;
+  /** El eco repite cada 3/4 de golpe (el eco "de toda la vida" en las voces). */
+  private static readonly VOCAL_ECHO_BEATS = 0.75;
+  /** ¿Está encendido VOCAL ECO? */
+  vocalEchoOn = false;
+  /** ¿Está encendido VOCAL REVERB? */
+  vocalReverbOn = false;
+
+  private buildVocalFx(): void {
+    const ctx = this.ctx;
+    // ECO: la voz entra (en mono) al retraso de la izquierda; de ahí pasa al de
+    // la derecha, y de ahí (algo más flojo) vuelve a la izquierda… y así.
+    this.vocalEchoSend = ctx.createGain();
+    this.vocalEchoSend.gain.value = 0;
+    this.vocalEchoSend.channelCount = 1; // juntamos izquierda y derecha en una
+    this.vocalEchoSend.channelCountMode = 'explicit';
+    const tone = ctx.createBiquadFilter(); // repeticiones "de radio": sin graves…
+    tone.type = 'highpass';
+    tone.frequency.value = 300;
+    const tone2 = ctx.createBiquadFilter(); // …ni agudos (cada vuelta, más apagadas)
+    tone2.type = 'lowpass';
+    tone2.frequency.value = 5500;
+    this.vocalEchoLeft = ctx.createDelay(4);
+    this.vocalEchoRight = ctx.createDelay(4);
+    const feedback = ctx.createGain();
+    feedback.gain.value = 0.62; // cada repetición, al 62 % de la anterior: dura bastante
+    const stereo = ctx.createChannelMerger(2);
+    this.vocalEchoSend.connect(tone).connect(tone2).connect(this.vocalEchoLeft);
+    this.vocalEchoLeft.connect(this.vocalEchoRight);
+    this.vocalEchoRight.connect(feedback).connect(this.vocalEchoLeft);
+    this.vocalEchoLeft.connect(stereo, 0, 0); // izquierda
+    this.vocalEchoRight.connect(stereo, 0, 1); // derecha
+    const wet = ctx.createGain();
+    wet.gain.value = 1.1; // las repeticiones, fuertes: que se noten
+    stereo.connect(wet).connect(this.bus);
+    this.updateVocalEcho();
+
+    // Reverb: una "sala" grande inventada (ruido que se va apagando en 2,8 s).
+    this.vocalReverbSend = ctx.createGain();
+    this.vocalReverbSend.gain.value = 0;
+    const convolver = ctx.createConvolver();
+    const length = Math.floor(ctx.sampleRate * 2.8);
+    const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const data = impulse.getChannelData(c);
+      for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 3);
+    }
+    convolver.buffer = impulse;
+    const reverbTone = ctx.createBiquadFilter(); // sin graves: que no embarre
+    reverbTone.type = 'highpass';
+    reverbTone.frequency.value = 250;
+    this.vocalReverbSend.connect(convolver).connect(reverbTone).connect(this.bus);
+  }
+
+  /** El eco sigue al BPM (3/4 de golpe), contando el tempo actual. */
+  private updateVocalEcho(): void {
+    if (!this.vocalEchoLeft) return;
+    const seconds = Math.min(2, (this.beatLength / this.rate) * Deck.VOCAL_ECHO_BEATS);
+    const now = this.ctx.currentTime;
+    this.vocalEchoLeft.delayTime.setTargetAtTime(seconds, now, 0.05);
+    this.vocalEchoRight.delayTime.setTargetAtTime(seconds, now, 0.05);
+  }
+
+  /** Pad VOCAL ECO: pulsas = se enciende, pulsas otra vez = se apaga. */
+  toggleVocalEcho(): void {
+    this.setVocalFx(!this.vocalEchoOn, this.vocalReverbOn);
+  }
+
+  /** Pad VOCAL REVERB: pulsas = se enciende, pulsas otra vez = se apaga. */
+  toggleVocalReverb(): void {
+    this.setVocalFx(this.vocalEchoOn, !this.vocalReverbOn);
+  }
+
+  private setVocalFx(echo: boolean, reverb: boolean): void {
+    const now = this.ctx.currentTime;
+    this.vocalEchoOn = echo;
+    this.vocalReverbOn = reverb;
+    this.vocalEchoSend.gain.setTargetAtTime(echo ? 1 : 0, now, 0.02);
+    this.vocalReverbSend.gain.setTargetAtTime(reverb ? 0.9 : 0, now, 0.02);
+    this.emit('stems'); // para que la pantalla y las luces de la mesa se actualicen
   }
 
   /**
@@ -162,6 +270,10 @@ export class Deck extends EventTarget {
     };
     // Avisos del propio procesador (errores atrapados, NaN, retraso recortado).
     node.port.onmessage = (e: MessageEvent<{ type: string; detail: string }>) => {
+      if (e.data.type === 'retraso') {
+        this.keylockDelay = Number(e.data.detail) / this.ctx.sampleRate;
+        return;
+      }
       if (e.data.type === 'recorte') return; // normal al cambiar el tempo: no llenamos el registro
       audioHealth.log(`Plato ${this.name}: ${e.data.detail}`, 'aviso');
     };
@@ -200,8 +312,15 @@ export class Deck extends EventTarget {
     this.layers = list.map(({ name, buffer }) => {
       const gain = this.ctx.createGain();
       gain.connect(this.bus);
+      // La voz, además, a los envíos de VOCAL ECO y VOCAL REVERB.
+      if (name === 'vocals') {
+        gain.connect(this.vocalEchoSend);
+        gain.connect(this.vocalReverbSend);
+      }
       return { name, buffer, gain };
     });
+    // Canción nueva: VOCAL ECO y VOCAL REVERB empiezan apagados.
+    this.setVocalFx(false, false);
     this.levels = { vocals: 1, drums: 1, bass: 1, other: 1 };
     this.lastLevels = { ...this.levels };
     this.applyStemLevels();
@@ -227,6 +346,7 @@ export class Deck extends EventTarget {
         : detectBeats(drums ? [drums.buffer] : this.buffers);
     this.bpm = grid?.bpm ?? null;
     this.firstBeat = grid?.firstBeat ?? null;
+    this.updateVocalEcho(); // el eco de la voz, al BPM de esta canción
     this.visual = analyze(this.layers);
     // Letra: la de internet si la hay (bien escrita; colocamos sus palabras sobre
     // el stem de voces), si no la de Whisper (palabra a palabra, pero adivinada).
@@ -350,6 +470,19 @@ export class Deck extends EventTarget {
     return beats - Math.floor(beats);
   }
 
+  /**
+   * Cuándo (en el reloj de audio) se OIRÁ el siguiente golpe de la canción a la
+   * salida de este plato (contando el retraso del key lock). null si no suena
+   * o no tiene BPM. Lo usa el GATE para cortar justo en los golpes.
+   */
+  nextBeatTime(): number | null {
+    if (!this.playing || this.bpm === null || this.firstBeat === null) return null;
+    const now = this.ctx.currentTime;
+    const beats = (this.positionAt(now) - this.firstBeat) / this.beatLength;
+    const untilNext = (Math.ceil(beats) - beats) * (this.beatLength / this.rate);
+    return now + untilNext + this.keylockDelay;
+  }
+
   /** El golpe más cercano a `t` (si no hay rejilla, el propio `t`). */
   nearestBeat(t: number): number {
     if (this.firstBeat === null) return t;
@@ -379,15 +512,37 @@ export class Deck extends EventTarget {
   async playAlignedTo(master: Deck): Promise<void> {
     if (this.playing) return;
     await this.ctx.resume();
-    const when = this.ctx.currentTime + 0.03;
-    const diff = master.isPlaying ? this.beatOffsetTo(master, when, this.offset) : null;
+    const now = this.ctx.currentTime;
+    const when = now + 0.03; // lo antes que podemos arrancar sin cortes
+    if (!master.isPlaying) return this.play();
+
+    // ⚠ Lo que OYES va un poco por detrás del reloj de la app: el sonido tarda
+    // en salir por la tarjeta y los altavoces (y en atravesar el key lock). Tú
+    // pulsas cuando OYES el golpe, así que el momento al que apuntabas es
+    // "ahora − ese retraso". Antes no lo contábamos: la app creía que habías
+    // pulsado tarde y te metía en el golpe ANTERIOR en vez del más cercano.
+    const heard = now - this.outputDelay() - master.keylockDelay;
+    const diff = this.beatOffsetTo(master, heard, this.offset);
     if (diff === null) return this.play();
-    if (diff >= 0) {
-      this.offset += diff * this.beatLength;
-      return this.play(when);
-    }
+
+    // Instante (reloj de la app) en que nuestra posición tiene que coincidir con
+    // el golpe de la otra MÁS CERCANO al que pulsaste. El key lock de cada plato
+    // puede retrasar distinto: lo compensamos para que coincidan al OÍRLO.
     const masterBeatSeconds = master.beatLength / master.tempo;
-    return this.play(when - diff * masterBeatSeconds);
+    const target = heard - diff * masterBeatSeconds + (master.keylockDelay - this.keylockDelay);
+    // Si aún no ha llegado ese golpe, esperamos y arrancamos justo en él…
+    if (target >= when) return this.play(target);
+    // …y si ya pasó (pulsaste un pelín tarde), arrancamos ya, adelantando la
+    // canción lo justo para ir cuadrados.
+    this.offset += (when - target) * this.rate;
+    return this.play(when);
+  }
+
+  /** Lo que tarda el sonido en salir por los altavoces (en segundos; el navegador lo sabe). */
+  private outputDelay(): number {
+    const ctx = this.ctx as AudioContext & { outputLatency?: number };
+    const total = (ctx.baseLatency || 0) + (ctx.outputLatency || 0);
+    return Math.max(0, Math.min(0.3, total)); // por si da algo raro, como mucho 0,3 s
   }
 
   /**
@@ -765,6 +920,7 @@ export class Deck extends EventTarget {
     }
     this.rate = rate;
     this.keylock.parameters.get('pitch')!.setValueAtTime(1 / rate, now);
+    this.updateVocalEcho(); // el eco de la voz sigue al tempo
     this.emit('tempo');
   }
 

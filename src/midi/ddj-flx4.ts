@@ -79,6 +79,9 @@ function deck(letter: 'A' | 'B', ch: number, padCh: number): { bindings: MidiBin
     // algunos botones: SHIFT + SYNC llega como 0x5C → desincronizar.
     { status: NOTE + ch, data1: 0x3f, kind: 'button', control: 'shift' },
     btn(0x5c, 'syncOff'),
+    // SHIFT + CUE llega como 0x48 → volver al principio de la canción.
+    // ⚠ Sacado de la documentación (no comprobado con la mesa todavía).
+    btn(0x48, 'cueStart'),
     // Botón CUE de AURICULARES de cada canal (pre-escucha en los cascos)
     btn(0x54, 'headCue'),
     // Tempo (fader largo). En Pioneer, ARRIBA = más lento (−) y ABAJO = más rápido (+).
