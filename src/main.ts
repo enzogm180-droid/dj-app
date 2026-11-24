@@ -80,6 +80,9 @@ const deckB: Deck = new Deck(ctx, mixer.b.input);
 // El eco y el gate de la ruedita del filtro van al ritmo de la canción de su canal.
 mixer.a.beatSeconds = () => beatSeconds(deckA);
 mixer.b.beatSeconds = () => beatSeconds(deckB);
+// El GATE corta justo en los golpes: necesita saber cuándo cae el siguiente.
+mixer.a.nextBeatAt = () => deckA.nextBeatTime();
+mixer.b.nextBeatAt = () => deckB.nextBeatTime();
 
 const libraryView = createLibraryView(document.getElementById('library')!, (track, library, letter) => {
   const view = letter === 'A' ? viewA : viewB;

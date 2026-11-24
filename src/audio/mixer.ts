@@ -35,6 +35,10 @@ export const EQ_MAX_DB = 6;
 /** Rango de la ganancia (GAIN), en decibelios. */
 export const GAIN_MIN_DB = -12;
 export const GAIN_MAX_DB = 12;
+/** Ruedita del FX: desde aquí (75 % del recorrido, a cada lado) el canal empieza a bajar… */
+export const FX_MUTE_FROM = 0.75;
+/** …y desde aquí (95 %) ya está en silencio. */
+export const FX_MUTE_FULL = 0.95;
 
 export class Channel {
   /** Aquí conectamos el plato. Es también el control de GAIN. */
@@ -44,6 +48,8 @@ export class Channel {
   private readonly cfx: ColorFx;
   /** Cuánto dura un golpe de la canción de este canal (para eco y gate). Lo pone main.ts. */
   beatSeconds: () => number = () => 0.5;
+  /** Cuándo cae (al oírse en este canal) el siguiente golpe; null si no suena. Lo pone main.ts (para el GATE). */
+  nextBeatAt: () => number | null = () => null;
   private readonly fader: GainNode;
   /** Lo controla el crossfader (no lo toques directamente). */
   readonly xfade: GainNode;
@@ -75,21 +81,37 @@ export class Channel {
 
     this.eq = { low, mid, high };
 
-    this.cfx = new ColorFx(ctx, () => this.beatSeconds());
+    this.cfx = new ColorFx(
+      ctx,
+      () => this.beatSeconds(),
+      () => this.nextBeatAt(),
+    );
 
     this.fader = ctx.createGain();
     this.xfade = ctx.createGain();
+    this.fxMute = ctx.createGain();
 
-    // Conectamos la cadena: entrada → bajos → medios → agudos → filtro/CFX → volumen → crossfader → salida
+    // Conectamos la cadena: entrada → bajos → medios → agudos → filtro/CFX → silencio del FX a tope → volumen → crossfader → salida
     this.input.connect(low).connect(mid).connect(high).connect(this.cfx.input);
-    this.cfx.output.connect(this.fader).connect(this.xfade).connect(output);
+    this.cfx.output.connect(this.fxMute).connect(this.fader).connect(this.xfade).connect(output);
 
     // Pre-escucha: se coge ANTES del fader, así se oye en los cascos aunque el
     // fader esté abajo (que es justo cuando la necesitas).
     this.cueSend = ctx.createGain();
     this.cueSend.gain.value = 0;
-    this.cfx.output.connect(this.cueSend).connect(cueBus);
+    this.fxMute.connect(this.cueSend).connect(cueBus);
   }
+
+  /**
+   * FX A TOPE = SILENCIO. Al llevar la ruedita del FILTRO/FX hasta el final (a
+   * la izquierda o a la derecha), TODO el sonido de este canal desaparece.
+   *
+   * No es un corte de golpe: desde el 75 % del recorrido el volumen va bajando
+   * poco a poco, y al 95 % ya no suena nada (un poco antes del tope, porque la
+   * rueda de la mesa a veces no llega justo al final). Al volver hacia el
+   * centro, vuelve el sonido.
+   */
+  private readonly fxMute: GainNode;
 
   /** Enciende o apaga la pre-escucha de este canal en los cascos. */
   setCue(on: boolean): void {
@@ -120,6 +142,10 @@ export class Channel {
    */
   setFilter(value: number): void {
     this.cfx.setValue(value);
+    // Silencio al llegar al tope (ver fxMute). Curva suave: sin escalones.
+    const t = (Math.abs(value) - FX_MUTE_FROM) / (FX_MUTE_FULL - FX_MUTE_FROM);
+    const x = Math.max(0, Math.min(1, t));
+    this.fxMute.gain.setTargetAtTime(1 - x * x * (3 - 2 * x), this.ctx.currentTime, 0.015);
   }
 
   /** Ecualizador: `db` entre EQ_MIN_DB y EQ_MAX_DB; 0 = sin cambios. */

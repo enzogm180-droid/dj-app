@@ -21,6 +21,7 @@ import type { Deck, StemGroup } from '../audio/deck';
 import {
   EQ_MAX_DB,
   EQ_MIN_DB,
+  FX_MUTE_FULL,
   GAIN_MAX_DB,
   GAIN_MIN_DB,
   type Band,
@@ -203,11 +204,13 @@ function channelStrip(letter: string, channel: Channel, deck: Deck, mixer: Mixer
       bipolar: true,
       format: (v) => {
         if (Math.abs(v) < 0.02) return 'off';
+        // A tope por cualquier lado el canal se queda en silencio (ver Channel.setFilter): lo avisamos.
+        if (Math.abs(v) >= FX_MUTE_FULL) return 'MUTE';
         const pct = `${Math.round(Math.abs(v) * 100)}%`;
         if (cfxState.type === 'filtro') return `${v < 0 ? 'LP' : 'HP'} ${pct}`;
         return v < 0 ? `◀ ${pct}` : `${pct} ▶`;
       },
-      onInput: (v) => channel.setFilter(v),
+      onInput: (v) => channel.setFilter(v), // a tope (a un lado u otro) también silencia el canal
   });
   $('[data-el="filter"]').append(filterKnob.el);
   filterKnobs.push(filterKnob);
@@ -313,10 +316,13 @@ export function createMixerView(root: HTMLElement, mixer: Mixer, deckA: Deck, de
   registerControl('xfader', { value: (p) => moveSlider(xfader, p) });
 
   // --- Botones FX: qué hace la ruedita del filtro ------------------------------------
-  //  4 botones = 4 efectos. Con SHIFT, los mismos 4 botones son los otros 4 efectos
-  //  (igual que los 4 botones de FX de la Hercules Inpulse 500).
+  //  4 botones = 4 efectos: Filtro, Eco, Espacio y Gate. Ya NO hay "segundo banco"
+  //  con SHIFT (Ruido, Gate, Phaser, Crush): se quitó para no cambiarlos sin querer
+  //  al usar SHIFT para otras cosas (SHIFT + SYNC, SHIFT + CUE…).
   const shiftBtn = root.querySelector<HTMLButtonElement>('[data-el="shift"]')!;
   const slotBtns = [...root.querySelectorAll<HTMLButtonElement>('[data-cfx-slot]')];
+  /** Los efectos que se usan (los 4 primeros de la lista). */
+  const MAIN_FX = CFX_TYPES.slice(0, 4);
 
   function selectCfx(type: CfxType): void {
     cfxState.type = type;
@@ -326,31 +332,29 @@ export function createMixerView(root: HTMLElement, mixer: Mixer, deckA: Deck, de
     showCfx();
   }
 
-  /** Pinta los 4 botones (del banco que toque según SHIFT) y las luces de la mesa. */
+  /** Pinta los 4 botones y las luces de la mesa. */
   function showCfx(): void {
-    const bank = isShift() ? 1 : 0;
     slotBtns.forEach((btn, i) => {
-      const fx = CFX_TYPES[bank * 4 + i];
+      const fx = MAIN_FX[i];
       btn.textContent = fx.label;
       btn.setAttribute('aria-pressed', String(fx.id === cfxState.type));
       setLight(`cfx.${i + 1}`, fx.id === cfxState.type);
     });
     shiftBtn.setAttribute('aria-pressed', String(isScreenShift()));
     shiftBtn.classList.toggle('held', isShift() && !isScreenShift()); // pulsado en la mesa o el teclado
-    root.querySelector('.cfx-panel')!.classList.toggle('shifted', isShift());
     // SMART CFX de la FLX4 encendido cuando hay un efecto distinto del filtro normal.
     setLight('cfx.smart', cfxState.type !== 'filtro');
   }
 
-  /** Pasa al efecto siguiente (o al anterior con SHIFT), en círculo. */
+  /** Pasa al efecto siguiente (o al anterior con SHIFT), en círculo, entre los 4. */
   function cycleCfx(): void {
-    const i = CFX_TYPES.findIndex((t) => t.id === cfxState.type);
+    const i = Math.max(0, MAIN_FX.findIndex((t) => t.id === cfxState.type));
     const step = isShift() ? -1 : 1;
-    selectCfx(CFX_TYPES[(i + step + CFX_TYPES.length) % CFX_TYPES.length].id);
+    selectCfx(MAIN_FX[(i + step + MAIN_FX.length) % MAIN_FX.length].id);
   }
 
-  /** Botón n (0-3) del banco que toque. */
-  const pressSlot = (n: number) => selectCfx(CFX_TYPES[(isShift() ? 4 : 0) + n].id);
+  /** Botón n (0-3): Filtro, Eco, Espacio o Gate. */
+  const pressSlot = (n: number) => selectCfx(MAIN_FX[n].id);
 
   slotBtns.forEach((btn, i) => btn.addEventListener('click', () => pressSlot(i)));
   shiftBtn.addEventListener('click', () => setShift('pantalla', !isScreenShift()));

@@ -96,7 +96,25 @@ export function setShift(source: ShiftSource, on: boolean): void {
   const before = isShift();
   if (on) shiftSources.add(source);
   else shiftSources.delete(source);
+  if (before && !isShift()) shiftReleasedAt = performance.now();
   if (isShift() !== before) for (const listener of shiftListeners) listener(isShift());
+}
+
+/** Cuándo se soltó SHIFT por última vez (para "SHIFT y seguidamente…"). */
+let shiftReleasedAt = -Infinity;
+/** Cuánto tiempo después de soltar SHIFT sigue contando (1,5 s). */
+const SHIFT_GRACE_MS = 1500;
+
+/**
+ * ¿SHIFT está pulsado, o se acaba de soltar hace un momento?
+ * Sirve para los que pulsan SHIFT, lo sueltan y SEGUIDAMENTE pulsan el otro
+ * botón (en vez de mantenerlo). Solo vale una vez: después ya no cuenta.
+ */
+export function consumeShift(): boolean {
+  if (isShift()) return true;
+  const recent = performance.now() - shiftReleasedAt < SHIFT_GRACE_MS;
+  shiftReleasedAt = -Infinity;
+  return recent;
 }
 
 /** ¿Está el SHIFT de la pantalla enganchado? (para pintar el botón) */

@@ -8,7 +8,7 @@
 import type { Deck, StemName } from '../audio/deck';
 import type { Library } from '../library/library';
 import { SAMPLES, type Sampler } from '../audio/sampler';
-import { isShift, onShift, registerControl, setLight } from '../midi/controls';
+import { consumeShift, isShift, onShift, registerControl, setLight } from '../midi/controls';
 import { Jog } from './jog';
 import { HOT_CUE_COLORS } from './stem-draw';
 import { Waveform } from './waveform';
@@ -134,6 +134,8 @@ export function createDeckView(
 
       <div class="pads" data-page="stems" role="group" aria-label="Stems del plato ${letter}">
         ${PADS.map(({ stem, label }) => `<button class="pad" data-stem="${stem}" disabled aria-pressed="false">${label}</button>`).join('')}
+        <button class="pad mode-pad vocal-fx" data-el="vocal-echo" disabled aria-pressed="false" title="Eco muy marcado solo en la voz, al ritmo (pulsa para encender o apagar)">Vocal eco</button>
+        <button class="pad mode-pad vocal-fx" data-el="vocal-reverb" disabled aria-pressed="false" title="Reverb solo en la voz (pulsa para encender o apagar)">Vocal reverb</button>
         <button class="pad mode-pad" data-el="acapella" disabled aria-pressed="false">Acapella</button>
         <button class="pad mode-pad" data-el="instrumental" disabled aria-pressed="false">Instrumental</button>
       </div>
@@ -169,8 +171,8 @@ export function createDeckView(
 
     <div class="loops">
       <div class="loop-tabs" role="group" aria-label="Tipo de loop del plato ${letter}">
-        <button data-loop-mode="snap" aria-pressed="true" title="Loop ajustado: empieza y acaba justo en un golpe">L.AJUST</button>
-        <button data-loop-mode="free" aria-pressed="false" title="Loop personalizado: empieza justo cuando pulsas, haya golpe o no">L.PERS</button>
+        <button data-loop-mode="snap" aria-pressed="false" title="Loop ajustado: empieza y acaba justo en un golpe">L.AJUST</button>
+        <button data-loop-mode="free" aria-pressed="true" title="Loop personalizado: empieza justo cuando pulsas, haya golpe o no">L.PERS</button>
       </div>
       <div class="loop-row">
         <button data-el="loop-in" disabled title="Marca el inicio del loop">IN</button>
@@ -220,6 +222,10 @@ export function createDeckView(
   const pads = [...root.querySelectorAll<HTMLButtonElement>('.pad[data-stem]')];
   const acapellaBtn = el<HTMLButtonElement>('acapella');
   const instrumentalBtn = el<HTMLButtonElement>('instrumental');
+  const vocalEchoBtn = el<HTMLButtonElement>('vocal-echo');
+  const vocalReverbBtn = el<HTMLButtonElement>('vocal-reverb');
+  /** Los 8 pads de la página STEMS, en el orden de la mesa (fila de arriba y de abajo). */
+  const stemPageBtns = () => [...pads, vocalEchoBtn, vocalReverbBtn, acapellaBtn, instrumentalBtn];
   const waveform = new Waveform(el<HTMLCanvasElement>('wave'));
   const jog = new Jog(el<HTMLCanvasElement>('jog'), deck, letter);
 
@@ -244,6 +250,15 @@ export function createDeckView(
     acapellaBtn.setAttribute('aria-pressed', String(acapella));
     instrumentalBtn.classList.toggle('active', instrumental);
     instrumentalBtn.setAttribute('aria-pressed', String(instrumental));
+    // VOCAL ECO / VOCAL REVERB: encendidos o apagados (solo con stems: necesitan la voz suelta).
+    for (const [btn, on] of [
+      [vocalEchoBtn, deck.vocalEchoOn],
+      [vocalReverbBtn, deck.vocalReverbOn],
+    ] as const) {
+      btn.disabled = !deck.hasStems;
+      btn.classList.toggle('active', deck.hasStems && on);
+      btn.setAttribute('aria-pressed', String(deck.hasStems && on));
+    }
     updatePadLights();
   }
 
@@ -304,11 +319,15 @@ export function createDeckView(
    * "Desincronizar" (SHIFT + SYNC): vuelve poco a poco al BPM ORIGINAL de la
    * canción (tempo 0 %), igual de suave que el SYNC pero al revés.
    */
+  /** true = el fader de tempo de la mesa no manda hasta que lo "recojas" (ver más abajo). */
+  let needsPickup = false;
+
   function unsync(): void {
     if (!deck.loaded) return;
     const change = Math.abs(1 - deck.tempo) * 100;
     if (change < 0.01) return; // ya está en su BPM original
     const seconds = Math.min(8, Math.max(1, change / SYNC_SPEED));
+    needsPickup = true; // que el fader de la mesa no lo deshaga (ver "recoger el fader")
     deck.glideTempo(1, seconds * 1000);
   }
 
@@ -329,6 +348,7 @@ export function createDeckView(
       return;
     }
     const seconds = Math.min(8, Math.max(1, change / SYNC_SPEED));
+    needsPickup = true; // que el fader de la mesa no lo deshaga (ver "recoger el fader")
     deck.glideTempo(finalRate, seconds * 1000);
     // Con la asistencia, al terminar de igualar el BPM cuadramos también los golpes.
     if (deckSettings.assist) {
@@ -358,6 +378,15 @@ export function createDeckView(
     setLight(`${letter}.sync`, !deck.isGliding && inSync());
   }
 
+  /**
+   * SHIFT + CUE: vuelve al PRINCIPIO de la canción. Si sonaba, sigue sonando
+   * desde el principio; si estaba parada, se queda parada ahí.
+   */
+  function backToStart(): void {
+    if (!deck.loaded) return;
+    void deck.seek(0);
+  }
+
   async function toggle(): Promise<void> {
     if (!deck.loaded) return;
     // Con la asistencia y la otra canción sonando, PLAY arranca justo en su golpe.
@@ -374,8 +403,8 @@ export function createDeckView(
   const loopHalfBtn = el<HTMLButtonElement>('loop-half');
   const loopDoubleBtn = el<HTMLButtonElement>('loop-double');
   const loopButtons = [loopInBtn, loopOutBtn, loopBtn, loopHalfBtn, loopDoubleBtn];
-  /** true = L.AJUST (al golpe), false = L.PERS (libre). */
-  let snap = true;
+  /** true = L.AJUST (al golpe), false = L.PERS (libre). Empieza en L.PERS. */
+  let snap = false;
   let sizeIndex = LOOP_SIZES.indexOf(4);
 
   function updateLoop(): void {
@@ -469,7 +498,8 @@ export function createDeckView(
   // --- Controladora MIDI -----------------------------------------------------------
   // La mesa tiene 8 pads por plato. Hacen lo mismo que los pads de la pantalla
   // según la página que esté elegida:
-  //   STEMS:     1-4 = Voces, Melodía, Bajo, Batería · 5 = Acapella · 6 = Instrumental
+  //   STEMS:     1-4 = Voces, Melodía, Bajo, Batería
+  //              5-8 = Vocal eco, Vocal reverb, Acapella, Instrumental
   //   HOT CUES:  1-4 = hot cues (guardar / saltar)  · 5-8 = borrar el de encima
   //   BEAT JUMP: 1-4 = ◀ 2, 4, 8, 16 golpes         · 5-8 = ▶ 2, 4, 8, 16 golpes
   //   SAMPLER:   1-8 = los 8 sonidos
@@ -477,7 +507,7 @@ export function createDeckView(
     if (padPage === 'hotcues') return n < 4 ? hotCueBtns[n] : (deleteBtns[n - 4] ?? null);
     if (padPage === 'beatjump') return jumpBtns[n] ?? null;
     if (padPage === 'sampler') return sampleBtns[n] ?? null;
-    return [...pads, acapellaBtn, instrumentalBtn][n] ?? null;
+    return stemPageBtns()[n] ?? null;
   }
 
   /** Luces de los pads de la mesa: encendido = stem sonando / hot cue guardado / sonido sonando. */
@@ -488,7 +518,7 @@ export function createDeckView(
       else if (padPage === 'beatjump') on = deck.loaded; // todos encendidos: así se ve el modo
       else if (padPage === 'sampler') on = sampler.isPlaying(n);
       else if (n < 4) on = deck.hasStems && deck.isStemOn(pads[n].dataset.stem as StemName);
-      else if (n < 6) on = (n === 4 ? acapellaBtn : instrumentalBtn).classList.contains('active');
+      else on = stemPageBtns()[n].classList.contains('active');
       setLight(`${letter}.pad${n + 1}`, on);
     }
   }
@@ -504,19 +534,45 @@ export function createDeckView(
   registerControl(`${letter}.cue`, {
     press: (down) => {
       if (!deck.loaded) return;
+      if (down && isShift()) return backToStart(); // SHIFT + CUE = al principio
       if (down) void deck.cueDown();
       else deck.cueUp();
     },
   });
+  // Con SHIFT pulsado, la FLX4 manda OTRO número para el CUE: también va al principio.
+  registerControl(`${letter}.cueStart`, { press: (down) => down && backToStart() });
   // SYNC (con SHIFT pulsado, desincroniza: ver sync()). Algunas controladoras
   // mandan un mensaje distinto para SHIFT + SYNC: ese va directo a desincronizar.
-  registerControl(`${letter}.sync`, { press: (down) => down && (isShift() ? unsync() : !syncBtn.disabled && sync()) });
+  // SHIFT + SYNC de la mesa: vale tanto manteniendo SHIFT como pulsando SHIFT y,
+  // seguidamente (en menos de 1,5 s), SYNC → vuelve poco a poco al BPM original.
+  registerControl(`${letter}.sync`, {
+    press: (down) => down && (consumeShift() ? unsync() : !syncBtn.disabled && sync()),
+  });
   registerControl(`${letter}.syncOff`, { press: (down) => down && unsync() });
   onShift(updateSync);
   // Fader de tempo: de 0 (un extremo) a 1 (el otro); el centro = 0 %.
   // Con una pequeña "zona muerta" en el centro: así el fader en medio da 0 % exacto.
+  //
+  // "RECOGER EL FADER": cuando SYNC o SHIFT + SYNC (OFF) cambian el tempo, el
+  // fader de la mesa se queda donde estaba. Si le hiciéramos caso al primer roce,
+  // el tempo SALTARÍA a esa posición y deshacería el SYNC o el OFF. Por eso, tras
+  // un cambio automático, ignoramos el fader de la mesa hasta que lo pases por el
+  // punto donde va de verdad la canción (entonces vuelve a mandar él).
+  let lastFaderPct: number | null = null;
   registerControl(`${letter}.tempo`, {
-    value: (p) => setTempo(Math.abs(p - 0.5) < 0.004 ? 0 : (p * 2 - 1) * range),
+    value: (p) => {
+      const pct = Math.abs(p - 0.5) < 0.004 ? 0 : (p * 2 - 1) * range;
+      const previous = lastFaderPct;
+      lastFaderPct = pct;
+      if (needsPickup) {
+        const now = (deck.tempo - 1) * 100;
+        const close = Math.abs(pct - now) < 0.3;
+        const crossed = previous !== null && (previous - now) * (pct - now) <= 0;
+        if (!close && !crossed) return; // todavía no lo ha "recogido"
+        needsPickup = false;
+      }
+      setTempo(pct);
+    },
   });
   registerControl(`${letter}.loopIn`, clickOnPress(() => loopInBtn));
   registerControl(`${letter}.loopOut`, clickOnPress(() => loopOutBtn));
@@ -600,7 +656,8 @@ export function createDeckView(
     } catch {
       // Algunos dispositivos no lo permiten; no pasa nada.
     }
-    deck.cueDown();
+    if (isShift()) backToStart(); // SHIFT + CUE = al principio
+    else deck.cueDown();
   });
   cueBtn.addEventListener('pointerup', () => deck.cueUp());
   cueBtn.addEventListener('pointercancel', () => deck.cueUp());
@@ -610,6 +667,8 @@ export function createDeckView(
   }
   acapellaBtn.addEventListener('click', () => deck.acapella());
   instrumentalBtn.addEventListener('click', () => deck.instrumental());
+  vocalEchoBtn.addEventListener('click', () => deck.toggleVocalEcho());
+  vocalReverbBtn.addEventListener('click', () => deck.toggleVocalReverb());
 
   // El motor nos avisa cuando algo cambia.
   deck.addEventListener('ended', updatePlayButton);
@@ -629,7 +688,7 @@ export function createDeckView(
   return {
     toggle,
     load,
-    cueDown: () => deck.cueDown(),
+    cueDown: () => (isShift() ? backToStart() : void deck.cueDown()),
     cueUp: () => deck.cueUp(),
     render() {
       const position = deck.position;
