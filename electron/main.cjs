@@ -133,6 +133,95 @@ app.on('second-instance', () => {
 // La X de la app pide cerrar el programa (ver preload.cjs).
 ipcMain.on('stemzo:cerrar', () => app.quit());
 
+// --- TU MÚSICA, SIN TENER QUE ELEGIR LA CARPETA ------------------------------------
+//
+// Al abrir Stemzo buscamos la carpeta "musica separada" en el MISMO DISCO donde
+// está el programa. Así, si llevas Stemzo y la música en el disco Z Slim, la
+// encuentra en cualquier portátil aunque Windows le ponga otra letra (D:, E:…).
+// Si no está ahí (p. ej. mientras programamos, que Stemzo está en C:), probamos
+// D:\musica separada.
+//
+// La app no puede leer el disco por sí sola (está encerrada por seguridad):
+// estas funciones leen y escriben por ella, y SOLO dentro de esa carpeta.
+
+const fs = require('node:fs/promises');
+
+const CARPETA_MUSICA = 'musica separada';
+
+/** La carpeta de música encontrada (la única que dejamos tocar a la app). */
+let raizMusica = null;
+
+async function esCarpeta(ruta) {
+  try {
+    return (await fs.stat(ruta)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+async function buscarMusica() {
+  const discoDelPrograma = path.parse(app.isPackaged ? process.execPath : __dirname).root; // p. ej. "D:\"
+  const candidatas = [path.join(discoDelPrograma, CARPETA_MUSICA), path.join('D:\\', CARPETA_MUSICA)];
+  for (const ruta of candidatas) {
+    if (await esCarpeta(ruta)) {
+      raizMusica = ruta;
+      return ruta;
+    }
+  }
+  return null;
+}
+
+/**
+ * Convierte una ruta de la app ("_stems/biblioteca.json") en la ruta real del
+ * disco, y comprueba que NO se sale de la carpeta de música.
+ */
+function rutaSegura(relativa) {
+  if (!raizMusica) throw new Error('No hay carpeta de música');
+  const ruta = path.resolve(raizMusica, ...String(relativa).split('/').filter(Boolean));
+  if (ruta !== raizMusica && !ruta.startsWith(raizMusica + path.sep)) throw new Error('Fuera de la carpeta de música');
+  return ruta;
+}
+
+ipcMain.handle('stemzo:musica-buscar', () => buscarMusica());
+
+// Qué hay dentro de una carpeta: [{ name, kind: 'file' | 'directory' }]
+ipcMain.handle('stemzo:musica-listar', async (_e, rel) => {
+  const entradas = await fs.readdir(rutaSegura(rel), { withFileTypes: true });
+  return entradas
+    .filter((e) => e.isFile() || e.isDirectory())
+    .map((e) => ({ name: e.name, kind: e.isDirectory() ? 'directory' : 'file' }));
+});
+
+// ¿Existe? → 'file', 'directory' o null
+ipcMain.handle('stemzo:musica-tipo', async (_e, rel) => {
+  try {
+    const info = await fs.stat(rutaSegura(rel));
+    return info.isDirectory() ? 'directory' : info.isFile() ? 'file' : null;
+  } catch {
+    return null;
+  }
+});
+
+// Leer un archivo entero (una canción, un stem, un .json…)
+ipcMain.handle('stemzo:musica-leer', async (_e, rel) => {
+  const datos = await fs.readFile(rutaSegura(rel));
+  return new Uint8Array(datos.buffer, datos.byteOffset, datos.byteLength);
+});
+
+ipcMain.handle('stemzo:musica-crear-carpeta', async (_e, rel) => {
+  await fs.mkdir(rutaSegura(rel), { recursive: true });
+});
+
+// Escribir un archivo (tus hot cues en "_stems/mis-datos.json"). Primero en un
+// archivo aparte y luego se cambia de golpe: si se desenchufa el disco a medias,
+// el archivo viejo sigue bien.
+ipcMain.handle('stemzo:musica-escribir', async (_e, rel, datos) => {
+  const destino = rutaSegura(rel);
+  const temporal = `${destino}.guardando`;
+  await fs.writeFile(temporal, typeof datos === 'string' ? datos : Buffer.from(datos));
+  await fs.rename(temporal, destino);
+});
+
 app.whenReady().then(() => {
   darPermisos();
   servirApp();
