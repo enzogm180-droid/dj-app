@@ -3179,3 +3179,148 @@ input.fader::-webkit-slider-thumb,
 .midi-learn button.on {
   animation: mini-pulse 0.8s ease-in-out infinite alternate;
 }
+
+/* ================================================================================
+   ANIMACIÓN DE INICIO: una línea INVISIBLE recorre la pantalla de izquierda a
+   derecha y, a su paso, va "creando" la app con un resplandor.
+
+   Cómo funciona: le ponemos a toda la app una MÁSCARA (lo que se ve y lo que no).
+   La máscara es un degradado: opaco a la izquierda → transparente a la derecha,
+   con un borde suave en medio (esa es la "línea invisible"). Aquí la dejamos
+   colocada de forma que NO se ve nada; src/ui/intro.ts la desliza hacia la
+   derecha (y hace resplandecer cada cosa cuando la línea pasa por ella).
+   ================================================================================ */
+#app.intro {
+  -webkit-mask-image: linear-gradient(90deg, #000 0 40%, transparent 60% 100%);
+  mask-image: linear-gradient(90deg, #000 0 40%, transparent 60% 100%);
+  -webkit-mask-size: 250% 100%;
+  mask-size: 250% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: 100% 0; /* borde fuera, a la izquierda: no se ve nada */
+  mask-position: 100% 0;
+}
+
+/* Si Windows tiene activado "reducir animaciones", la app sale directamente. */
+@media (prefers-reduced-motion: reduce) {
+  #app.intro {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+
+/* EL NOMBRE DETRÁS DE LA CORTINA: al arrancar se ve "STEMZO" grande en el
+   centro. La app es como una cortina que se va corriendo por encima de
+   izquierda a derecha: donde ya hay app, el nombre desaparece. Lleva la
+   máscara AL REVÉS que la app (transparente a la izquierda, opaco a la
+   derecha), y se mueve a la vez, así una cosa se va justo donde llega la otra. */
+#app.intro {
+  position: relative;
+  z-index: 1;
+}
+
+.intro-logo {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  font-family: var(--font-display, system-ui, 'Segoe UI', sans-serif);
+  font-weight: 700;
+  font-size: clamp(48px, 11vw, 180px);
+  letter-spacing: 0.32em;
+  padding-left: 0.32em; /* compensa el espacio de la última letra: queda centrado */
+  text-transform: uppercase;
+  color: var(--text, #f5f5f5);
+  text-shadow: 0 0 40px rgb(255 255 255 / 0.35);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0 40%, #000 60% 100%);
+  mask-image: linear-gradient(90deg, transparent 0 40%, #000 60% 100%);
+  -webkit-mask-size: 250% 100%;
+  mask-size: 250% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: 100% 0; /* al principio se ve entero */
+  mask-position: 100% 0;
+  animation: logo-aparece 0.5s ease-out both;
+}
+
+/* La primera letra, del color del botón PLAY (como arriba a la izquierda). */
+.intro-logo > span {
+  display: block;
+}
+
+.intro-logo > span::first-letter {
+  color: var(--play);
+}
+
+/* Antes de que pase la cortina, el nombre aparece suavemente. */
+@keyframes logo-aparece {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro-logo {
+    display: none;
+  }
+}
+
+/* Logo STEMZO: la S y las dos últimas letras (ZO) en rojo, el color fuerte
+   de la app. Vale para el nombre de arriba a la izquierda y el de la animación. */
+.logo-rojo {
+  color: var(--play);
+}
+
+/* LA X DE CERRAR (solo en el programa Stemzo): arriba a la derecha. Al pasar
+   el ratón por encima o al pulsarla, se pone roja (como en Windows). */
+.topbar .close-app {
+  flex: none;
+  width: 34px;
+  height: 26px;
+  margin-left: 4px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text, #f5f5f5);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.topbar .close-app:hover,
+.topbar .close-app:focus-visible,
+.topbar .close-app:active {
+  background: var(--play);
+  border-color: var(--play);
+  color: #fff;
+  outline: none;
+}
+
+.topbar .close-app:active {
+  filter: brightness(0.85); /* al pulsar, un rojo un poco más oscuro */
+}
+
+/* --- PANTALLAS GRANDES (p. ej. 1920 × 1080 a pantalla completa) ------------------
+   Ahí sobraba sitio en la lista de canciones y todo se veía pequeño. Le quitamos
+   un poco de espacio a la lista y se lo damos al resto:
+   - las ondas de arriba, un poco más altas;
+   - la barra de arriba, los platos y el mixer, un poco más grandes ("zoom": lo
+     agranda todo a la vez, letras, botones, ruedas y platos, sin descolocarlo).
+   En portátiles (pantallas más pequeñas) no cambia nada. */
+@media (min-width: 1700px) and (min-height: 950px) {
+  .lane canvas {
+    height: 88px;
+  }
+
+  .topbar,
+  .console {
+    zoom: 1.1;
+  }
+}

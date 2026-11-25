@@ -22,3 +22,6 @@ dist/
 # Entorno de Python del preparador (se regenera con pip install)
 .venv/
 __pycache__/
+
+# Instalador del programa (se regenera con "npm run app:instalador")
+release/

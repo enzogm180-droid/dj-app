@@ -6,6 +6,7 @@ import { Library, lastFolder, pickFolder, reconnect, supportsFolders, type Track
 import { useLibrary } from '../library/hotcue-store';
 import { formatTime } from './deck-view';
 import { registerControl } from '../midi/controls';
+import { introDone } from './intro';
 
 export interface LibraryView {
   /** La biblioteca abierta ahora mismo (o null si aún no hay ninguna). */
@@ -230,9 +231,13 @@ export function createLibraryView(
   search.addEventListener('input', renderRows);
 
   // ¿Recordamos una carpeta de la última vez?
-  lastFolder().then((last) => {
+  lastFolder().then(async (last) => {
     if (!last) return;
     if (last.granted) {
+      // (En el programa Stemzo el permiso ya está dado y se abre sola.) Esperamos
+      // a que acabe la animación de inicio: leer la carpeta ocupa al ordenador un
+      // momento y, mientras, la animación se quedaría congelada.
+      await introDone;
       use(last.handle);
       return;
     }

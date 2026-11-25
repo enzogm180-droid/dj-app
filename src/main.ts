@@ -24,11 +24,20 @@ import { setShift } from './midi/controls';
 import { createMixerView } from './ui/mixer-view';
 import { updateFaderFills } from './ui/fader-fill';
 import { ScrollingWave } from './ui/scrolling-wave';
+import { finishIntroWhenDone } from './ui/intro';
 
 const app = document.querySelector<HTMLElement>('#app')!;
+finishIntroWhenDone(app); // animación de inicio: la línea invisible que crea la app
+
+/**
+ * ¿Estamos dentro del PROGRAMA Stemzo (Electron) o en Chrome? El programa nos
+ * da `window.stemzo` (ver electron/preload.cjs). Solo en el programa sale la X
+ * de cerrar arriba a la derecha (en Chrome se cierra la pestaña).
+ */
+const stemzoProgram = (window as Window & { stemzo?: { cerrar(): void } }).stemzo ?? null;
 app.innerHTML = `
   <header class="topbar">
-    <h1>dj-app</h1>
+    <h1>stem<span class="logo-rojo">zo</span></h1>
     <button class="assist" id="assist" aria-pressed="true"
       title="Al dar PLAY con la otra canción sonando, arranca justo en su golpe. SYNC también cuadra los golpes.">
       Asistencia de golpe: ON
@@ -37,6 +46,7 @@ app.innerHTML = `
     <button class="assist audio-btn" id="audio-status" title="Estado del audio y registro de problemas">Audio OK</button>
     <button class="assist outputs-btn" id="outputs-btn" title="Elegir por dónde sale el sonido: altavoces y auriculares">🔊 Salidas</button>
     <span class="hint">A: Q play · W cue — B: P play · O cue — doble clic en un control = valor inicial</span>
+    ${stemzoProgram ? '<button class="close-app" id="close-app" title="Cerrar Stemzo" aria-label="Cerrar Stemzo">✕</button>' : ''}
   </header>
   <section id="midi-panel" aria-label="Monitor MIDI"></section>
   <section id="audio-panel" aria-label="Registro de audio"></section>
@@ -154,6 +164,9 @@ watchAudio({
 createAudioView(document.getElementById('audio-status') as HTMLButtonElement, document.getElementById('audio-panel')!, reactivateAudio);
 // Botón "🔊 Salidas": por dónde sale la mesa (altavoces) y por dónde los auriculares.
 createOutputsView(document.getElementById('outputs-btn') as HTMLButtonElement, document.getElementById('outputs-panel')!, outputs);
+
+// La X de arriba a la derecha (solo en el programa): cierra Stemzo.
+document.getElementById('close-app')?.addEventListener('click', () => stemzoProgram?.cerrar());
 
 // Controladora MIDI (botón "MIDI" de arriba + monitor).
 createMidiView(document.getElementById('midi') as HTMLButtonElement, document.getElementById('midi-panel')!);
