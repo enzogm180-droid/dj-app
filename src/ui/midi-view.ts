@@ -5,7 +5,8 @@
  *  - Después, cada clic abre o cierra el monitor: una lista con los últimos
  *    mensajes que ha mandado la mesa y a qué control de la app han ido.
  *    Si tocas algo y sale "sin asignar", ese botón no está en el mapa
- *    (src/midi/ddj-flx4.ts) o tiene otro número: el monitor te dice cuál.
+ *    (src/midi/ddj-flx4.ts o src/midi/inpulse-500.ts) o tiene otro número:
+ *    el monitor te dice cuál.
  */
 import {
   cancelLearn,
@@ -34,6 +35,15 @@ const LEARNABLE: { control: string; label: string }[] = [
   { control: 'B.syncOff', label: 'Plato B: desincronizar (volver al BPM original)' },
   { control: 'A.cueStart', label: 'Plato A: volver al principio (SHIFT + CUE)' },
   { control: 'B.cueStart', label: 'Plato B: volver al principio (SHIFT + CUE)' },
+  // Botones de modo de los pads (en la Inpulse 500 hay que asignarlos así).
+  { control: 'A.padPage.stems', label: 'Plato A: pads en modo STEMS' },
+  { control: 'A.padPage.hotcues', label: 'Plato A: pads en modo HOT CUES' },
+  { control: 'A.padPage.beatjump', label: 'Plato A: pads en modo BEAT JUMP' },
+  { control: 'A.padPage.sampler', label: 'Plato A: pads en modo SAMPLER' },
+  { control: 'B.padPage.stems', label: 'Plato B: pads en modo STEMS' },
+  { control: 'B.padPage.hotcues', label: 'Plato B: pads en modo HOT CUES' },
+  { control: 'B.padPage.beatjump', label: 'Plato B: pads en modo BEAT JUMP' },
+  { control: 'B.padPage.sampler', label: 'Plato B: pads en modo SAMPLER' },
 ];
 
 export function createMidiView(button: HTMLButtonElement, panel: HTMLElement): void {

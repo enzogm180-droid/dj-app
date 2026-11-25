@@ -173,6 +173,3 @@ export const DDJ_FLX4: ControllerMap = {
   ],
   lights: { ...a.lights, ...b.lights },
 };
-
-/** Todas las controladoras que conocemos (de momento, una). */
-export const CONTROLLER_MAPS: ControllerMap[] = [DDJ_FLX4];
