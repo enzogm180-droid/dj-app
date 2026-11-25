@@ -11,7 +11,14 @@
  * Si se desenchufa y se vuelve a enchufar, se reconecta sola.
  */
 import { currentLights, onLight, pressControl, setControlValue, turnControl } from './controls';
-import { CONTROLLER_MAPS, DDJ_FLX4, type ControllerMap, type MidiBinding } from './ddj-flx4';
+import { DDJ_FLX4, type ControllerMap, type MidiBinding } from './ddj-flx4';
+import { INPULSE_500 } from './inpulse-500';
+
+/**
+ * Todas las controladoras que conocemos. Al enchufar una, se elige su mapa
+ * por el nombre que da Windows (si no la conocemos, se usa el de la FLX4).
+ */
+const CONTROLLER_MAPS: ControllerMap[] = [DDJ_FLX4, INPULSE_500];
 
 /** Un mensaje recibido, para enseñarlo en el monitor MIDI. */
 export interface MonitorEntry {
@@ -114,7 +121,13 @@ function pickDevice(): void {
  * mensaje, p. ej. simulateMidi([0x90, 0x0B, 0x7F]) = pulsar PLAY del plato A.
  * (Solo se usa desde la consola del navegador en modo desarrollo.)
  */
-export function simulateMidi(bytes: number[]): void {
+export function simulateMidi(bytes: number[], controller?: string): void {
+  // Opcional: con qué mapa probar, p. ej. simulateMidi([0x91, 0x07, 0x7F], 'Inpulse 500').
+  const wanted = controller ? CONTROLLER_MAPS.find((m) => m.match.test(controller)) : undefined;
+  if (wanted && wanted !== map) {
+    map = wanted;
+    buildLookup();
+  }
   if (!lookup.size) buildLookup();
   handle(new Uint8Array(bytes));
 }

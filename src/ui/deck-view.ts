@@ -579,6 +579,10 @@ export function createDeckView(
   registerControl(`${letter}.loop`, clickOnPress(() => loopBtn));
   registerControl(`${letter}.loopHalf`, clickOnPress(() => loopHalfBtn));
   registerControl(`${letter}.loopDouble`, clickOnPress(() => loopDoubleBtn));
+  // Ruedecita de loop (Inpulse 500): cada "clic" a la derecha = loop el doble
+  // de largo; a la izquierda = la mitad. Solo miramos el SENTIDO del giro, así
+  // un giro rápido no se salta tamaños.
+  registerControl(`${letter}.loopSize`, { turn: (delta) => delta !== 0 && changeSize(delta > 0 ? 1 : -1) });
   // Los 4 botones de modo de encima de los pads (en la FLX4: HOT CUE, PAD FX 1,
   // BEAT JUMP y SAMPLER) eligen, por orden, STEMS, HOT CUES, BEAT JUMP y SAMPLER.
   for (const p of PAD_PAGES) registerControl(`${letter}.padPage.${p}`, { press: (down) => down && showPadPage(p) });
