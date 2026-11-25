@@ -7,6 +7,7 @@ import { useLibrary } from '../library/hotcue-store';
 import { formatTime } from './deck-view';
 import { registerControl } from '../midi/controls';
 import { introDone } from './intro';
+import { programMusicFolder } from '../library/program-folder';
 
 export interface LibraryView {
   /** La biblioteca abierta ahora mismo (o null si aún no hay ninguna). */
@@ -163,6 +164,7 @@ export function createLibraryView(
       ? 'tus hot cues se guardan en la carpeta'
       : 'solo lectura: tus hot cues se guardan en este PC';
     info.textContent = `${library.name}: ${library.tracks.length} canciones · ${prepared} con stems · ${where}`;
+    console.info(`Biblioteca abierta: ${info.textContent}`); // (para ver en el registro que se abrió bien)
     library.onSaveError = () => {
       info.textContent = `⚠ No se pudo guardar en "${library.name}". ¿Has quitado el pincho? Vuelve a abrir la carpeta.`;
     };
@@ -230,24 +232,41 @@ export function createLibraryView(
 
   search.addEventListener('input', renderRows);
 
-  // ¿Recordamos una carpeta de la última vez?
-  lastFolder().then(async (last) => {
-    if (!last) return;
-    if (last.granted) {
-      // (En el programa Stemzo el permiso ya está dado y se abre sola.) Esperamos
-      // a que acabe la animación de inicio: leer la carpeta ocupa al ordenador un
-      // momento y, mientras, la animación se quedaría congelada.
+  // En el PROGRAMA Stemzo: abrimos sola la carpeta "musica separada" de su mismo
+  // disco (sin elegirla). En Chrome, o si no la encuentra, la de la última vez.
+  // Esperamos a que acabe la animación de inicio: leer la carpeta ocupa al
+  // ordenador un momento y, mientras, la animación se quedaría congelada.
+  void (async () => {
+    const auto = await programMusicFolder();
+    if (auto) {
       await introDone;
-      use(last.handle);
-      return;
+      try {
+        await use(auto);
+        return;
+      } catch (err) {
+        console.error('No se pudo leer la carpeta de música', err);
+      }
     }
-    // El navegador exige un clic para volver a dar permiso.
-    reconnectBtn.hidden = false;
-    reconnectBtn.textContent = `Volver a abrir "${last.handle.name}"`;
-    reconnectBtn.addEventListener('click', async () => {
-      if (await reconnect(last.handle)) await use(last.handle);
+    rememberedFolder();
+  })();
+
+  /** ¿Recordamos una carpeta de la última vez? */
+  function rememberedFolder(): void {
+    lastFolder().then(async (last) => {
+      if (!last) return;
+      if (last.granted) {
+        await introDone; // (igual: sin congelar la animación de inicio)
+        use(last.handle);
+        return;
+      }
+      // El navegador exige un clic para volver a dar permiso.
+      reconnectBtn.hidden = false;
+      reconnectBtn.textContent = `Volver a abrir "${last.handle.name}"`;
+      reconnectBtn.addEventListener('click', async () => {
+        if (await reconnect(last.handle)) await use(last.handle);
+      });
     });
-  });
+  }
 
   return view;
 }
